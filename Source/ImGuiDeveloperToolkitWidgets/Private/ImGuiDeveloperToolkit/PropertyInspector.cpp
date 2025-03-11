@@ -3,15 +3,27 @@
 #include "Containers/AnsiString.h"
 #include "imgui.h"
 
+#include <type_traits>
+
 namespace ImGuiDeveloperToolkit::PropertyInspector
 {
 
 namespace Private
 {
 
-void Inspect(const char* Label, const FProperty& Property, void* Outer);
+template <class From, class To>
+using TCopyConstType = std::conditional_t<std::is_const_v<std::remove_reference_t<From>>, std::add_const_t<To>, To>;
 
-void Inspect(const char* Label, const FIntProperty& IntProperty, void* Outer)
+static_assert(std::is_same_v<TCopyConstType<const float, int32>, const int32>);
+static_assert(std::is_same_v<TCopyConstType<float, int32>, int32>);
+static_assert(std::is_same_v<TCopyConstType<const float&, int32>, const int32>);
+static_assert(std::is_same_v<TCopyConstType<float&, int32>, int32>);
+
+template <class T>
+void Inspect(const char* Label, const FProperty& Property, T* Outer);
+
+template <class T>
+void Inspect(const char* Label, const FIntProperty& IntProperty, T* Outer)
 {
 	ImGui::TableNextRow();
 
@@ -20,20 +32,26 @@ void Inspect(const char* Label, const FIntProperty& IntProperty, void* Outer)
 
 	ImGui::TableNextColumn();
 
-	int32* Ptr = IntProperty.ContainerPtrToValuePtr<int32>(Outer);
+	constexpr bool bIsConst = TIsConst<T>::Value;
+
+	auto* Ptr = IntProperty.ContainerPtrToValuePtr<TCopyConstType<T, int32>>(Outer);
 	int32 Value = IntProperty.GetPropertyValue(Ptr);
 	ImGui::PushID(Label);
-	if (ImGui::InputInt("", &Value))
+	if (ImGui::InputInt("", &Value, 1, 100, bIsConst ? ImGuiInputTextFlags_ReadOnly : 0))
 	{
-		IntProperty.SetPropertyValue(Ptr, Value);
-		// make sure property changed gets propagated, maybe even transact?
+		if constexpr (!bIsConst)
+		{
+			IntProperty.SetPropertyValue(Ptr, Value);
+			// make sure property changed gets propagated, maybe even transact?
+		}
 	}
 	ImGui::PopID();
 }
 
-void Inspect(const char* Label, const FArrayProperty& ArrayProperty, void* Outer)
+template <class T>
+void Inspect(const char* Label, const FArrayProperty& ArrayProperty, T* Outer)
 {
-	void* ArrayData = ArrayProperty.ContainerPtrToValuePtr<void>(Outer);
+	auto* ArrayData = ArrayProperty.ContainerPtrToValuePtr<TCopyConstType<T, void>>(Outer);
 
 	if (ArrayData == nullptr || ArrayProperty.Inner == nullptr)
 	{
@@ -62,7 +80,10 @@ void Inspect(const char* Label, const FArrayProperty& ArrayProperty, void* Outer
 		FAnsiStringBuilderBase LabelBuilder;
 		LabelBuilder.Append("[").Append(FAnsiString::FromInt(Index)).Append("]");
 
-		Inspect(LabelBuilder.ToString(), *ArrayProperty.Inner, ArrayHelper.GetRawPtr(Index));
+		ImGui::PushID(Index);
+		TCopyConstType<T, void>* RawElementPtr = ArrayHelper.GetRawPtr(Index);
+		Inspect(LabelBuilder.ToString(), *ArrayProperty.Inner, RawElementPtr);
+		ImGui::PopID();
 	}
 
 	ImGui::PopID();
@@ -70,7 +91,8 @@ void Inspect(const char* Label, const FArrayProperty& ArrayProperty, void* Outer
 	ImGui::TreePop();
 }
 
-void Inspect(const char* Label, const UStruct& Struct, void* Instance)
+template <class T>
+void Inspect(const char* Label, const UStruct& Struct, T* Instance)
 {
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
@@ -108,24 +130,19 @@ void Inspect(const char* Label, const UStruct& Struct, void* Instance)
 	ImGui::TreePop();
 }
 
-void Inspect(const char* Label, const FStructProperty& StructProperty, void* Outer)
+template <class T>
+void Inspect(const char* Label, const FStructProperty& StructProperty, T* Outer)
 {
 	if (!IsValid(StructProperty.Struct))
 	{
 		return;
 	}
 
-	const char* const PropertyName =
-		reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*StructProperty.GetName()).Get());
-	const char* const DisplayName =
-		reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*StructProperty.GetDisplayNameText().ToString()).Get());
-
-	ImGui::PushID(PropertyName);
-	Inspect(DisplayName, *StructProperty.Struct, StructProperty.ContainerPtrToValuePtr<void>(Outer));
-	ImGui::PopID();
+	Inspect(Label, *StructProperty.Struct, StructProperty.ContainerPtrToValuePtr<TCopyConstType<T, void>>(Outer));
 }
 
-void Inspect(const char* Label, const FProperty& Property, void* Outer)
+template <class T>
+void Inspect(const char* Label, const FProperty& Property, T* Outer)
 {
 	if (const FArrayProperty* const ArrayProperty = CastField<FArrayProperty>(&Property))
 	{
@@ -141,9 +158,8 @@ void Inspect(const char* Label, const FProperty& Property, void* Outer)
 	}
 }
 
-}  // namespace Private
-
-void Inspect(const char* Label, const UStruct& Struct, void* Instance)
+template <class T>
+void InspectObject(const char* Label, const UStruct& Struct, T* Instance)
 {
 	if (Instance == nullptr)
 	{
@@ -152,15 +168,27 @@ void Inspect(const char* Label, const UStruct& Struct, void* Instance)
 
 	constexpr int TableFlags = ImGuiTableFlags_BordersV | ImGuiTableFlags_BordersOuterH | ImGuiTableFlags_Resizable
 							   | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoBordersInBody;
-	if (ImGui::BeginTable("Struct", 2, TableFlags))
+	if (ImGui::BeginTable(Label, 2, TableFlags))
 	{
 		ImGui::TableSetupColumn("Index" /*, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide*/);
 		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-		Private::Inspect(Label, Struct, Instance);
+		Inspect(Label, Struct, Instance);
 
 		ImGui::EndTable();
 	}
+}
+
+}  // namespace Private
+
+void Inspect(const char* Label, const UStruct& Struct, void* Instance)
+{
+	Private::InspectObject(Label, Struct, Instance);
+}
+
+void Inspect(const char* Label, const UStruct& Struct, const void* Instance)
+{
+	Private::InspectObject(Label, Struct, Instance);
 }
 
 }  // namespace ImGuiDeveloperToolkit::PropertyInspector
