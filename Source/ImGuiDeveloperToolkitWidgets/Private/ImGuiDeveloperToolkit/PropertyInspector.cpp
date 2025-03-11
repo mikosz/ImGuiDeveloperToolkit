@@ -64,7 +64,7 @@ void Inspect(const char* Label, const FArrayProperty& ArrayProperty, T* Outer)
 
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
-	const bool bShowElements = ImGui::TreeNode(Label);
+	const bool bShowElements = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanAllColumns);
 	ImGui::TableNextColumn();
 	ImGui::Text("[%d]", NumElements);
 
@@ -96,7 +96,7 @@ void Inspect(const char* Label, const UStruct& Struct, T* Instance)
 {
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
-	const bool bShowMembers = ImGui::TreeNode(Label);
+	const bool bShowMembers = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanAllColumns);
 	ImGui::TableNextColumn();
 
 	const char* const TypeDisplayName =
