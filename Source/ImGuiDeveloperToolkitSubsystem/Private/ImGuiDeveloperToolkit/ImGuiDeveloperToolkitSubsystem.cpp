@@ -10,21 +10,24 @@
 namespace ImGuiDeveloperToolkitSubsystemPrivate
 {
 
-EImGuiDeveloperToolkitToolContext GetContext()
+TPair<EImGuiDeveloperToolkitToolContext, UWorld*> GetContext()
 {
-	const bool bInEditor =
 #if WITH_EDITOR
-		GIsEditor && IsValid(GEditor) && (GEditor->PlayWorld == nullptr);
-#else
-		false;
-#endif
+	if (GIsEditor && IsValid(GEditor) && !IsValid(GEditor->PlayWorld))
+	{
+		return {EImGuiDeveloperToolkitToolContext::Editor, GEditor->GetEditorWorldContext().World()};
+	}
 
-	return bInEditor ? EImGuiDeveloperToolkitToolContext::Editor : EImGuiDeveloperToolkitToolContext::Game;
+	return {EImGuiDeveloperToolkitToolContext::Game, GEditor->PlayWorld};
+#else
+	// #TODO_dontcommit probably see how many GEngine->WorldContexts and if one return it?
+	return {EImGuiDeveloperToolkitToolContext::Game, nullptr};
+#endif
 }
 
 bool IsWithinCurrentContext(const UImGuiDeveloperToolkitTool& Tool)
 {
-	return EnumHasAnyFlags(Tool.GetContext(), GetContext());
+	return EnumHasAnyFlags(Tool.GetContext(), GetContext().Get<0>());
 }
 
 }  // namespace ImGuiDeveloperToolkitSubsystemPrivate
@@ -209,7 +212,7 @@ void UImGuiDeveloperToolkitSubsystem::TickTools(const float DeltaTime)
 {
 	using namespace ImGuiDeveloperToolkitSubsystemPrivate;
 
-	const EImGuiDeveloperToolkitToolContext Context = GetContext();
+	const auto& [Context, World] = GetContext();
 
 	for (UImGuiDeveloperToolkitTool* Tool : Tools)
 	{
@@ -221,7 +224,7 @@ void UImGuiDeveloperToolkitSubsystem::TickTools(const float DeltaTime)
 		const FAnsiString ToolName = Tool->GetToolName();
 
 		bool bShown = Configuration.IsShown(ToolName);
-		Tool->Tick(DeltaTime, bShown, Context);
+		Tool->Tick(DeltaTime, bShown, Context, World);
 
 		Configuration.SetShown(ToolName, bShown);
 	}

@@ -46,7 +46,8 @@ public:
 	///		Note that this parameter has no effect in either the subsystem or the tool itself. It's just
 	///		a parameter stored here for ease of access.
 	/// @param Context context in which the toolkit is being run
+	/// @param World the level editor world or the game world we're operating in
 	/// @return whether the tool should be shown
-	virtual void Tick(float DeltaTime, bool& bInOutShown, EImGuiDeveloperToolkitToolContext Context)
+	virtual void Tick(float DeltaTime, bool& bInOutShown, EImGuiDeveloperToolkitToolContext Context, UWorld* World)
 		PURE_VIRTUAL(UImGuiDeveloperToolkit::Tick);
 };
