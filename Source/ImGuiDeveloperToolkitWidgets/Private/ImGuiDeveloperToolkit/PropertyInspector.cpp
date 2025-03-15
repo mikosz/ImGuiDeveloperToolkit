@@ -3,6 +3,8 @@
 #include "Containers/AnsiString.h"
 #include "imgui.h"
 
+#define LOCTEXT_NAMESPACE "ImGuiDeveloperToolkitWidgetsPropertyInspector"
+
 namespace ImGuiDeveloperToolkit::PropertyInspector
 {
 
@@ -144,6 +146,8 @@ struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 		TCppType Value = NumericProperty->GetPropertyValue(Ptr);
 		const TCppType Step = 1;
 		const TCppType StepFast = 100;
+
+		ImGui::BeginDisabled(bIsConst);
 		ImGui::PushID(Label);
 		if (ImGui::InputScalar(
 				"",
@@ -160,11 +164,90 @@ struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 				if (IsValid(OuterObject))
 				{
 					FPropertyChangedEvent PropertyChangedEvent{NumericProperty, EPropertyChangeType::ValueSet};
+					// #TODO_dontcommit use EmitPropertyChangeNotifications?
 					OuterObject->PostEditChangeProperty(PropertyChangedEvent);
 				}
 			}
 		}
 		ImGui::PopID();
+		ImGui::EndDisabled();
+
+		return true;
+	}
+};
+
+template <class OuterType>
+struct FTryInspect<FEnumProperty, OuterType>
+{
+	bool operator()(
+		const char* Label, FProperty& Property, OuterType* Outer, TCopyConstType<OuterType, UObject>* OuterObject) const
+	{
+		FEnumProperty* const EnumProperty = ExactCastField<FEnumProperty>(&Property);
+		if (!EnumProperty)
+		{
+			return false;
+		}
+
+		ImGui::TableNextRow();
+
+		ImGui::TableNextColumn();
+		ImGui::Text("%s", Label);
+
+		ImGui::TableNextColumn();
+
+		const UEnum* Enum = EnumProperty->GetEnum();
+		if (!IsValid(Enum))
+		{
+			return true;
+		}
+
+		FNumericProperty* UnderlyingProperty = EnumProperty->GetUnderlyingProperty();
+		if (!UnderlyingProperty)
+		{
+			return true;
+		}
+
+		auto* Ptr = EnumProperty->ContainerPtrToValuePtr<TCopyConstType<OuterType, void>>(Outer);
+		const int64 EnumValue = UnderlyingProperty->GetSignedIntPropertyValue(Ptr);
+
+		const FText PreviewDisplayName = Enum->IsValidEnumValue(EnumValue)
+											 ? Enum->GetDisplayNameTextByValue(EnumValue)
+											 : LOCTEXT("PropertyInspectorDefaultEnumPreviewValue", "Select value");
+		const FUtf8String PreviewDisplayNameUtf8 = FUtf8String{StringCast<UTF8CHAR>(*PreviewDisplayName.ToString())};
+
+		constexpr bool bIsConst = TIsConst<OuterType>::Value;
+
+		ImGui::BeginDisabled(bIsConst);
+		ImGui::PushID(Label);
+		if (ImGui::BeginCombo("", reinterpret_cast<const char*>(*PreviewDisplayNameUtf8)))
+		{
+			// #TODO_dontcommit add the conditional -1 for MAX or COUNT
+			for (int32 Index = 0; Index < Enum->NumEnums(); ++Index)
+			{
+				const int64 Value = Enum->GetValueByIndex(Index);
+				const FText DisplayName = Enum->GetDisplayNameTextByIndex(Index);
+				const FUtf8String DisplayNameUtf8 = FUtf8String{StringCast<UTF8CHAR>(*DisplayName.ToString())};
+
+				// #TODO_dontcommit: tooltips!
+				if (ImGui::Selectable(reinterpret_cast<const char*>(*DisplayNameUtf8), EnumValue == Value))
+				{
+					if constexpr (!bIsConst)
+					{
+						UnderlyingProperty->SetIntPropertyValue(Ptr, Value);
+						if (IsValid(OuterObject))
+						{
+							FPropertyChangedEvent PropertyChangedEvent{EnumProperty, EPropertyChangeType::ValueSet};
+							// #TODO_dontcommit use EmitPropertyChangeNotifications?
+							OuterObject->PostEditChangeProperty(PropertyChangedEvent);
+						}
+					}
+				}
+			}
+
+			ImGui::EndCombo();
+		}
+		ImGui::PopID();
+		ImGui::EndDisabled();
 
 		return true;
 	}
@@ -243,10 +326,11 @@ void Inspect(const char* Label, FStructProperty& StructProperty, T* Outer, TCopy
 template <class T>
 void Inspect(const char* Label, FProperty& Property, T* Outer, TCopyConstType<T, UObject>* OuterObject)
 {
-	if (FTryInspect<FArrayProperty, T>{}(Label, Property, Outer, OuterObject)
-		|| FTryInspect<FIntProperty, T>{}(Label, Property, Outer, OuterObject)
+	if (FTryInspect<FIntProperty, T>{}(Label, Property, Outer, OuterObject)
 		|| FTryInspect<FFloatProperty, T>{}(Label, Property, Outer, OuterObject)
-		|| FTryInspect<FDoubleProperty, T>{}(Label, Property, Outer, OuterObject))
+		|| FTryInspect<FDoubleProperty, T>{}(Label, Property, Outer, OuterObject)
+		|| FTryInspect<FArrayProperty, T>{}(Label, Property, Outer, OuterObject)
+		|| FTryInspect<FEnumProperty, T>{}(Label, Property, Outer, OuterObject))
 	{
 		return;
 	}
@@ -340,3 +424,5 @@ void Inspect(const char* Label, const UClass& Class, const UObject& Instance)
 }
 
 }  // namespace ImGuiDeveloperToolkit::PropertyInspector
+
+#undef LOCTEXT_NAMESPACE
