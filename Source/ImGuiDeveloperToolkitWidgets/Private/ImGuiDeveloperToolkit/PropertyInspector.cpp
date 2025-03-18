@@ -1,6 +1,7 @@
 ﻿#include "ImGuiDeveloperToolkit/PropertyInspector.h"
 
 #include "Containers/AnsiString.h"
+#include "ImGuiDeveloperToolkit/AutoWidget.h"
 #include "imgui.h"
 
 #define LOCTEXT_NAMESPACE "ImGuiDeveloperToolkitWidgetsPropertyInspector"
@@ -112,9 +113,17 @@ template <class T>
 constexpr ImGuiDataType_ TImGuiScalarDataType_V = TImGuiScalarInfo<T>::DataType;
 
 template <class T>
-void Inspect(const char* Label, FProperty& Property, T* Outer, TCopyConstType<T, UObject>* OuterObject);
+void Inspect(
+	const char* Label,
+	FProperty& Property,
+	T* Outer,
+	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject);
 template <class T>
-void Inspect(const char* Label, const UStruct& Struct, T* Instance, TCopyConstType<T, UObject>* OuterObject);
+void Inspect(
+	const char* Label,
+	const UStruct& Struct,
+	T* Instance,
+	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject);
 
 template <class T, class OuterType, class Enable = void>
 struct FTryInspect;
@@ -123,7 +132,10 @@ template <class T, class OuterType>
 struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 {
 	bool operator()(
-		const char* Label, FProperty& Property, OuterType* Outer, TCopyConstType<OuterType, UObject>* OuterObject) const
+		const char* Label,
+		FProperty& Property,
+		OuterType* Outer,
+		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject) const
 	{
 		T* const NumericProperty = ExactCastField<T>(&Property);
 		if (!NumericProperty)
@@ -142,7 +154,10 @@ struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 
 		constexpr bool bIsConst = TIsConst<OuterType>::Value;
 
-		auto* Ptr = NumericProperty->template ContainerPtrToValuePtr<TCopyConstType<OuterType, TCppType>>(Outer);
+		auto* Ptr =
+			NumericProperty
+				->template ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, TCppType>>(
+					Outer);
 		TCppType Value = NumericProperty->GetPropertyValue(Ptr);
 		const TCppType Step = 1;
 		const TCppType StepFast = 100;
@@ -180,7 +195,10 @@ template <class OuterType>
 struct FTryInspect<FEnumProperty, OuterType>
 {
 	bool operator()(
-		const char* Label, FProperty& Property, OuterType* Outer, TCopyConstType<OuterType, UObject>* OuterObject) const
+		const char* Label,
+		FProperty& Property,
+		OuterType* Outer,
+		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject) const
 	{
 		FEnumProperty* const EnumProperty = ExactCastField<FEnumProperty>(&Property);
 		if (!EnumProperty)
@@ -207,47 +225,34 @@ struct FTryInspect<FEnumProperty, OuterType>
 			return true;
 		}
 
-		auto* Ptr = EnumProperty->ContainerPtrToValuePtr<TCopyConstType<OuterType, void>>(Outer);
-		const int64 EnumValue = UnderlyingProperty->GetSignedIntPropertyValue(Ptr);
-
-		const FText PreviewDisplayName = Enum->IsValidEnumValue(EnumValue)
-											 ? Enum->GetDisplayNameTextByValue(EnumValue)
-											 : LOCTEXT("PropertyInspectorDefaultEnumPreviewValue", "Select value");
-		const FUtf8String PreviewDisplayNameUtf8 = FUtf8String{StringCast<UTF8CHAR>(*PreviewDisplayName.ToString())};
-
 		constexpr bool bIsConst = TIsConst<OuterType>::Value;
 
-		ImGui::BeginDisabled(bIsConst);
-		ImGui::PushID(Label);
-		if (ImGui::BeginCombo("", reinterpret_cast<const char*>(*PreviewDisplayNameUtf8)))
-		{
-			// #TODO_dontcommit add the conditional -1 for MAX or COUNT
-			for (int32 Index = 0; Index < Enum->NumEnums(); ++Index)
-			{
-				const int64 Value = Enum->GetValueByIndex(Index);
-				const FText DisplayName = Enum->GetDisplayNameTextByIndex(Index);
-				const FUtf8String DisplayNameUtf8 = FUtf8String{StringCast<UTF8CHAR>(*DisplayName.ToString())};
+		// #TODO_dontcommit the need to say ImGuiDeveloperToolkit::Private:: for type traits is irritating
+		auto* Ptr =
+			EnumProperty->ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, void>>(
+				Outer);
+		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, int64> EnumValue =
+			UnderlyingProperty->GetSignedIntPropertyValue(Ptr);
 
-				// #TODO_dontcommit: tooltips!
-				if (ImGui::Selectable(reinterpret_cast<const char*>(*DisplayNameUtf8), EnumValue == Value))
+		// #TODO_dontcommit: tooltips everywhere!
+
+		ImGui::PushID(Label);
+
+		if (Widgets::AutoWidget("", *Enum, EnumValue))
+		{
+			if constexpr (!bIsConst)
+			{
+				UnderlyingProperty->SetIntPropertyValue(Ptr, EnumValue);
+				if (IsValid(OuterObject))
 				{
-					if constexpr (!bIsConst)
-					{
-						UnderlyingProperty->SetIntPropertyValue(Ptr, Value);
-						if (IsValid(OuterObject))
-						{
-							FPropertyChangedEvent PropertyChangedEvent{EnumProperty, EPropertyChangeType::ValueSet};
-							// #TODO_dontcommit use EmitPropertyChangeNotifications?
-							OuterObject->PostEditChangeProperty(PropertyChangedEvent);
-						}
-					}
+					FPropertyChangedEvent PropertyChangedEvent{EnumProperty, EPropertyChangeType::ValueSet};
+					// #TODO_dontcommit use EmitPropertyChangeNotifications?
+					OuterObject->PostEditChangeProperty(PropertyChangedEvent);
 				}
 			}
-
-			ImGui::EndCombo();
 		}
+
 		ImGui::PopID();
-		ImGui::EndDisabled();
 
 		return true;
 	}
@@ -257,7 +262,10 @@ template <class OuterType>
 struct FTryInspect<FArrayProperty, OuterType>
 {
 	bool operator()(
-		const char* Label, FProperty& Property, OuterType* Outer, TCopyConstType<OuterType, UObject>* OuterObject) const
+		const char* Label,
+		FProperty& Property,
+		OuterType* Outer,
+		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject) const
 	{
 		FArrayProperty* const ArrayProperty = ExactCastField<FArrayProperty>(&Property);
 		if (!ArrayProperty)
@@ -265,7 +273,9 @@ struct FTryInspect<FArrayProperty, OuterType>
 			return false;
 		}
 
-		auto* ArrayData = ArrayProperty->ContainerPtrToValuePtr<TCopyConstType<OuterType, void>>(Outer);
+		auto* ArrayData =
+			ArrayProperty->ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, void>>(
+				Outer);
 
 		if (ArrayData == nullptr || ArrayProperty->Inner == nullptr)
 		{
@@ -295,7 +305,8 @@ struct FTryInspect<FArrayProperty, OuterType>
 			LabelBuilder.Append("[").Append(FAnsiString::FromInt(Index)).Append("]");
 
 			ImGui::PushID(Index);
-			TCopyConstType<OuterType, void>* RawElementPtr = ArrayHelper.GetRawPtr(Index);
+			ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, void>* RawElementPtr =
+				ArrayHelper.GetRawPtr(Index);
 			Inspect(LabelBuilder.ToString(), *ArrayProperty->Inner, RawElementPtr, OuterObject);
 			ImGui::PopID();
 		}
@@ -309,7 +320,11 @@ struct FTryInspect<FArrayProperty, OuterType>
 };
 
 template <class T>
-void Inspect(const char* Label, FStructProperty& StructProperty, T* Outer, TCopyConstType<T, UObject>* OuterObject)
+void Inspect(
+	const char* Label,
+	FStructProperty& StructProperty,
+	T* Outer,
+	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject)
 {
 	if (!IsValid(StructProperty.Struct))
 	{
@@ -319,12 +334,16 @@ void Inspect(const char* Label, FStructProperty& StructProperty, T* Outer, TCopy
 	Inspect(
 		Label,
 		*StructProperty.Struct,
-		StructProperty.ContainerPtrToValuePtr<TCopyConstType<T, void>>(Outer),
+		StructProperty.ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<T, void>>(Outer),
 		OuterObject);
 }
 
 template <class T>
-void Inspect(const char* Label, FProperty& Property, T* Outer, TCopyConstType<T, UObject>* OuterObject)
+void Inspect(
+	const char* Label,
+	FProperty& Property,
+	T* Outer,
+	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject)
 {
 	if (FTryInspect<FIntProperty, T>{}(Label, Property, Outer, OuterObject)
 		|| FTryInspect<FFloatProperty, T>{}(Label, Property, Outer, OuterObject)
@@ -342,7 +361,11 @@ void Inspect(const char* Label, FProperty& Property, T* Outer, TCopyConstType<T,
 }
 
 template <class T>
-void Inspect(const char* Label, const UStruct& Struct, T* Instance, TCopyConstType<T, UObject>* OuterObject)
+void Inspect(
+	const char* Label,
+	const UStruct& Struct,
+	T* Instance,
+	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject)
 {
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
@@ -381,7 +404,11 @@ void Inspect(const char* Label, const UStruct& Struct, T* Instance, TCopyConstTy
 }
 
 template <class T>
-void InspectObject(const char* Label, const UStruct& Struct, T* Instance, TCopyConstType<T, UObject>* OuterObject)
+void InspectObject(
+	const char* Label,
+	const UStruct& Struct,
+	T* Instance,
+	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject)
 {
 	if (Instance == nullptr)
 	{
