@@ -1,7 +1,6 @@
 ﻿#include "ImGuiDeveloperToolkit/AutoWidget.h"
 
 #include "ImGuiDeveloperToolkit/Private/TypeTraits.h"
-#include "imgui.h"
 
 #include <type_traits>
 
@@ -12,6 +11,17 @@ namespace ImGuiDeveloperToolkit::Widgets
 
 namespace Private
 {
+
+const char* const TImGuiScalarInfo<int8>::Format = "%hhd";
+const char* const TImGuiScalarInfo<uint8>::Format = "%hhu";
+const char* const TImGuiScalarInfo<int16>::Format = "%hd";
+const char* const TImGuiScalarInfo<uint16>::Format = "%hu";
+const char* const TImGuiScalarInfo<int32>::Format = "%d";
+const char* const TImGuiScalarInfo<uint32>::Format = "%u";
+const char* const TImGuiScalarInfo<int64>::Format = "%lld";
+const char* const TImGuiScalarInfo<uint64>::Format = "%llu";
+const char* const TImGuiScalarInfo<float>::Format = "%f";
+const char* const TImGuiScalarInfo<double>::Format = "%g";
 
 template <class T UE_REQUIRES(std::is_same_v<std::decay_t<T>, int64>)>
 bool AutoWidget(const char* Label, const UEnum& Enum, T& EnumValue)
@@ -109,6 +119,22 @@ bool AutoWidget(const char* Label, const UEnum& Enum, int64& EnumValue)
 bool AutoWidget(const char* Label, const UEnum& Enum, const int64& EnumValue)
 {
 	return Private::AutoWidget(Label, Enum, EnumValue);
+}
+
+bool AutoWidget(const char* Label, bool& BoolValue)
+{
+	return ImGui::Checkbox(Label, &BoolValue);
+}
+
+bool AutoWidget(const char* Label, const bool& BoolValue)
+{
+	ImGui::BeginDisabled();
+
+	bool bValue = BoolValue;
+	const bool bResult = AutoWidget(Label, bValue);
+	ImGui::EndDisabled();
+
+	return bResult;
 }
 
 }  // namespace ImGuiDeveloperToolkit::Widgets

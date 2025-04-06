@@ -24,95 +24,6 @@ static_assert(!TIsNumericPropertyV<int>);
 static_assert(TIsNumericPropertyV<FIntProperty>);
 static_assert(TIsNumericPropertyV<TProperty_Numeric<int32>>);
 
-template <class T>
-struct TImGuiScalarInfo
-{
-};
-
-template <>
-struct TImGuiScalarInfo<int8>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_S8;
-	static const char* const Format;
-};
-
-template <>
-struct TImGuiScalarInfo<uint8>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_U8;
-	static const char* const Format;
-};
-
-template <>
-struct TImGuiScalarInfo<int16>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_S16;
-	static const char* const Format;
-};
-
-template <>
-struct TImGuiScalarInfo<uint16>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_U16;
-	static const char* const Format;
-};
-
-template <>
-struct TImGuiScalarInfo<int32>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_S32;
-	static const char* const Format;
-};
-
-template <>
-struct TImGuiScalarInfo<uint32>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_U32;
-	static const char* const Format;
-};
-
-template <>
-struct TImGuiScalarInfo<int64>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_S64;
-	static const char* const Format;
-};
-
-template <>
-struct TImGuiScalarInfo<uint64>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_U64;
-	static const char* const Format;
-};
-
-template <>
-struct TImGuiScalarInfo<float>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_Float;
-	static const char* const Format;
-};
-
-template <>
-struct TImGuiScalarInfo<double>
-{
-	static constexpr ImGuiDataType_ DataType = ImGuiDataType_Double;
-	static const char* const Format;
-};
-
-const char* const TImGuiScalarInfo<int8>::Format = "%hhd";
-const char* const TImGuiScalarInfo<uint8>::Format = "%hhu";
-const char* const TImGuiScalarInfo<int16>::Format = "%hd";
-const char* const TImGuiScalarInfo<uint16>::Format = "%hu";
-const char* const TImGuiScalarInfo<int32>::Format = "%d";
-const char* const TImGuiScalarInfo<uint32>::Format = "%u";
-const char* const TImGuiScalarInfo<int64>::Format = "%lld";
-const char* const TImGuiScalarInfo<uint64>::Format = "%llu";
-const char* const TImGuiScalarInfo<float>::Format = "%f";
-const char* const TImGuiScalarInfo<double>::Format = "%g";
-
-template <class T>
-constexpr ImGuiDataType_ TImGuiScalarDataType_V = TImGuiScalarInfo<T>::DataType;
-
 template <class ChangeFunctionType>
 void EmitPropertyChangeNotifications(
 	const FPropertyAccessChangeNotify& ChangeNotify, const bool bIdenticalValue, ChangeFunctionType&& ChangeFunction)
@@ -135,6 +46,13 @@ void Inspect(
 template <class T>
 void Inspect(
 	const char* Label,
+	FStructProperty& StructProperty,
+	FPropertyAccessChangeNotify& ChangeNotify,
+	T* Outer,
+	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject);
+template <class T>
+void Inspect(
+	const char* Label,
 	const UStruct& Struct,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
@@ -142,6 +60,55 @@ void Inspect(
 
 template <class T, class OuterType, class Enable = void>
 struct FTryInspect;
+
+template <class OuterType>
+struct FTryInspect<FBoolProperty, OuterType>
+{
+	bool operator()(
+		const char* Label,
+		FProperty& Property,
+		FPropertyAccessChangeNotify& ChangeNotify,
+		OuterType* Outer,
+		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject) const
+	{
+		FBoolProperty* const BoolProperty = ExactCastField<FBoolProperty>(&Property);
+		if (!BoolProperty)
+		{
+			return false;
+		}
+
+		ImGui::TableNextRow();
+
+		ImGui::TableNextColumn();
+		ImGui::Text("%s", Label);
+
+		ImGui::TableNextColumn();
+
+		constexpr bool bIsConst = TIsConst<OuterType>::Value;
+
+		auto* Ptr =
+			BoolProperty
+				->template ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, bool>>(
+					Outer);
+		bool Value = BoolProperty->GetPropertyValue(Ptr);
+		const bool OldValue = Value;
+
+		ImGui::BeginDisabled(bIsConst);
+		ImGui::PushID(Label);
+		if (Widgets::AutoWidget("", Value))
+		{
+			if constexpr (!bIsConst)
+			{
+				EmitPropertyChangeNotifications(
+					ChangeNotify, OldValue == Value, [=] { BoolProperty->SetPropertyValue(Ptr, Value); });
+			}
+		}
+		ImGui::PopID();
+		ImGui::EndDisabled();
+
+		return true;
+	}
+};
 
 template <class T, class OuterType>
 struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
@@ -176,19 +143,14 @@ struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 					Outer);
 		TCppType Value = NumericProperty->GetPropertyValue(Ptr);
 		const TCppType OldValue = Value;
+		// #TODO_dontcommit: potentially make custom steps per type? If so then move to auto widget. Of a default there
+		// per type but allow to override via meta.
 		const TCppType Step = 1;
 		const TCppType StepFast = 100;
 
 		ImGui::BeginDisabled(bIsConst);
 		ImGui::PushID(Label);
-		if (ImGui::InputScalar(
-				"",
-				TImGuiScalarDataType_V<TCppType>,
-				&Value,
-				&Step,
-				&StepFast,
-				TImGuiScalarInfo<TCppType>::Format,
-				bIsConst ? ImGuiInputTextFlags_ReadOnly : 0))
+		if (Widgets::AutoWidget(Label, Value, Step, StepFast))
 		{
 			if constexpr (!bIsConst)
 			{
@@ -325,6 +287,10 @@ struct FTryInspect<FArrayProperty, OuterType>
 			if (ImGui::SmallButton("Clr"))
 			{
 				// #TODO_dontcommit: also notify property changed on array clear / add / remove
+				// #TODO_dontcommit: also need to test whether property chains are setup correctly
+				// #TODO_dontcommit: also need to make sure properties are marked dirty for replication and assets are marked as modified
+				// at least in editor
+				// #TODO_dontcommit: make sure transactions are setup so that undo works in editor
 				ArrayHelper.Resize(0);
 
 				// Need to exit early as NumElements is not up-to-date
@@ -386,6 +352,28 @@ struct FTryInspect<FArrayProperty, OuterType>
 	}
 };
 
+template <class OuterType>
+struct FTryInspect<FStructProperty, OuterType>
+{
+	bool operator()(
+		const char* Label,
+		FProperty& Property,
+		FPropertyAccessChangeNotify& ChangeNotify,
+		OuterType* Outer,
+		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject) const
+	{
+		FStructProperty* const StructProperty = CastField<FStructProperty>(&Property);
+		if (!StructProperty)
+		{
+			return false;
+		}
+
+		Inspect(Label, *StructProperty, ChangeNotify, Outer, OuterObject);
+
+		return true;
+	}
+};
+
 template <class T>
 void Inspect(
 	const char* Label,
@@ -415,19 +403,34 @@ void Inspect(
 	T* Outer,
 	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject)
 {
-	if (FTryInspect<FIntProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
-		|| FTryInspect<FFloatProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+	if (
+		// NumericProperty subtypes
+		FTryInspect<FByteProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
 		|| FTryInspect<FDoubleProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		|| FTryInspect<FFloatProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		|| FTryInspect<FInt8Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		|| FTryInspect<FInt64Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		|| FTryInspect<FIntProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		|| FTryInspect<FUInt16Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		|| FTryInspect<FUInt32Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		|| FTryInspect<FUInt64Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		// Other properties
+		|| FTryInspect<FBoolProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
 		|| FTryInspect<FArrayProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
-		|| FTryInspect<FEnumProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject))
+		|| FTryInspect<FEnumProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		|| FTryInspect<FStructProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject))
 	{
 		return;
 	}
 
-	if (FStructProperty* const StructProperty = CastField<FStructProperty>(&Property))
-	{
-		Inspect(Label, *StructProperty, ChangeNotify, Outer, OuterObject);
-	}
+	const char* const PropertyTypeDisplayName =
+		reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Property.GetClass()->GetName()).Get());
+
+	ImGui::TableNextRow();
+	ImGui::TableNextColumn();
+	ImGui::Text(Label);
+	ImGui::TableNextColumn();
+	ImGui::Text("Unsupported type: %s", PropertyTypeDisplayName);
 }
 
 template <class T>
