@@ -302,16 +302,50 @@ struct FTryInspect<FArrayProperty, OuterType>
 
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
-		const bool bShowElements = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanAllColumns);
+		const bool bShowElements = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanFullWidth);
 		ImGui::TableNextColumn();
 		ImGui::Text("[%d]", NumElements);
+
+		ImGui::PushID(Label);
+		ON_SCOPE_EXIT
+		{
+			ImGui::PopID();
+		};
+
+		constexpr bool bIsConst = TIsConst<OuterType>::Value;
+		if constexpr (!bIsConst)
+		{
+			ImGui::SameLine();
+			if (ImGui::SmallButton("+"))
+			{
+				ArrayHelper.AddValue();
+			}
+
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Clr"))
+			{
+				// #TODO_dontcommit: also notify property changed on array clear / add / remove
+				ArrayHelper.Resize(0);
+
+				// Need to exit early as NumElements is not up-to-date
+				if (bShowElements)
+				{
+					ImGui::TreePop();
+				}
+
+				return true;
+			}
+		}
 
 		if (!bShowElements)
 		{
 			return true;
 		}
 
-		ImGui::PushID(Label);
+		ON_SCOPE_EXIT
+		{
+			ImGui::TreePop();
+		};
 
 		auto* PreviousActiveNode = ChangeNotify.ChangedPropertyChain.GetActiveNode();
 		FProperty* PreviousActiveProperty = PreviousActiveNode ? PreviousActiveNode->GetValue() : nullptr;
@@ -319,24 +353,34 @@ struct FTryInspect<FArrayProperty, OuterType>
 		ChangeNotify.ChangedPropertyChain.AddHead(ArrayProperty->Inner);
 		ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(&Property);
 
+		ON_SCOPE_EXIT
+		{
+			ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(PreviousActiveProperty);
+			ChangeNotify.ChangedPropertyChain.RemoveNode(ArrayProperty->Inner);
+		};
+
 		for (int32 Index = 0; Index < NumElements; ++Index)
 		{
 			FAnsiStringBuilderBase LabelBuilder;
 			LabelBuilder.Append("[").Append(FAnsiString::FromInt(Index)).Append("]");
 
 			ImGui::PushID(Index);
+			ON_SCOPE_EXIT
+			{
+				ImGui::PopID();
+			};
+
 			ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, void>* RawElementPtr =
 				ArrayHelper.GetRawPtr(Index);
 			Inspect(LabelBuilder.ToString(), *ArrayProperty->Inner, ChangeNotify, RawElementPtr, OuterObject);
-			ImGui::PopID();
+
+			ImGui::SameLine();
+			if (ImGui::SmallButton("-"))
+			{
+				ArrayHelper.RemoveValues(Index);
+				return true;
+			}
 		}
-
-		ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(PreviousActiveProperty);
-		ChangeNotify.ChangedPropertyChain.RemoveNode(ArrayProperty->Inner);
-
-		ImGui::PopID();
-
-		ImGui::TreePop();
 
 		return true;
 	}
@@ -396,7 +440,7 @@ void Inspect(
 {
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
-	const bool bShowMembers = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanAllColumns);
+	const bool bShowMembers = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanFullWidth);
 	ImGui::TableNextColumn();
 
 	const char* const TypeDisplayName =
