@@ -1,8 +1,10 @@
 ﻿#include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitConfiguration.h"
 
 #include "ImGuiContext.h"
+#include "ImGuiDeveloperToolkit/AutoWidget.h"
 #include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitSubsystem.h"
 #include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitWindow.h"
+#include "ImGuiDeveloperToolkit/Private/EnumValueRange.h"
 #include "ImageUtils.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -14,6 +16,7 @@ struct FConfigurationData
 {
 	FUtf8String FontName = {};
 	int32 FontSize = -1;
+	FAnsiString Glyphs;
 	TMap<FAnsiString, bool> ToolShownByName = {};
 };
 
@@ -78,6 +81,10 @@ void ConfigurationHandler_ReadLine(ImGuiContext*, ImGuiSettingsHandler*, void* E
 			const FUtf8String ValueStr{Value};
 			GConfigurationData->FontSize = FCStringUtf8::Atoi(*ValueStr);
 		}
+		else if (Key == FUtf8StringView{"Glyphs"})
+		{
+			GConfigurationData->Glyphs = FAnsiString{Value};
+		}
 	}
 	else if (Section == EConfigurationSection::Tools)
 	{
@@ -100,7 +107,38 @@ static void ConfigurationHandler_ApplyAll(ImGuiContext* Ctx, ImGuiSettingsHandle
 		return;
 	}
 
-	Subsystem->Configuration.SetFont(GConfigurationData->FontName, GConfigurationData->FontSize);
+	const EImGuiDeveloperToolkitGlyphRanges GlyphRanges = []
+	{
+		const UEnum* Enum = StaticEnum<EImGuiDeveloperToolkitGlyphRanges>();
+		if (!ensure(IsValid(Enum)))
+		{
+			return EImGuiDeveloperToolkitGlyphRanges::None;
+		}
+
+		TArray<FAnsiString> GlyphNames;
+		FAnsiString{GConfigurationData->Glyphs}.ParseIntoArray(GlyphNames, "|");
+
+		int64 Result = 0;
+		for (const FAnsiString& GlyphName : GlyphNames)
+		{
+			Result |= Enum->GetValueByNameString(FString{GlyphName}, EGetByNameFlags::ErrorIfNotFound);
+		}
+
+		return static_cast<EImGuiDeveloperToolkitGlyphRanges>(Result);
+	}();
+
+	Subsystem->Configuration.SetFont(GConfigurationData->FontName, GConfigurationData->FontSize, GlyphRanges);
+}
+
+template <class StringType>
+StringType JoinGlyphsAsString(const EImGuiDeveloperToolkitGlyphRanges Mask, const StringType& Separator)
+{
+	using namespace ImGuiDeveloperToolkit::Private;
+
+	return StringType::JoinBy(
+		TMaskEnumValueRange<EImGuiDeveloperToolkitGlyphRanges>{Mask},
+		*Separator,
+		&TEnumValue<EImGuiDeveloperToolkitGlyphRanges>::GetName);
 }
 
 // ReSharper disable once CppParameterMayBeConstPtrOrRef
@@ -114,6 +152,7 @@ static void ConfigurationHandler_WriteAll(ImGuiContext* Ctx, ImGuiSettingsHandle
 	Buf->appendf("[ImGuiDeveloperToolkitConfiguration][Font]\n");
 	Buf->appendf("Name=%s\n", *GConfigurationData->FontName);
 	Buf->appendf("Size=%d\n", GConfigurationData->FontSize);
+	Buf->appendf("Glyphs=%s\n", *GConfigurationData->Glyphs);
 
 	Buf->appendf("\n[ImGuiDeveloperToolkitConfiguration][Tools]\n");
 	for (const auto& [ToolName, bShow] : GConfigurationData->ToolShownByName)
@@ -131,6 +170,44 @@ static void ContextHook_Shutdown(ImGuiContext* Ctx, ImGuiContextHook* Hook)
 
 	delete GConfigurationData;
 	GConfigurationData = nullptr;
+}
+
+template <class ArrayType>
+void MakeGlyphRanges(ArrayType& Ranges, const EImGuiDeveloperToolkitGlyphRanges Mask)
+{
+	using namespace ImGuiDeveloperToolkit::Private;
+
+	for (TEnumValue EnumValue : TMaskEnumValueRange{Mask})
+	{
+		switch (EnumValue.GetValue())
+		{
+			case EImGuiDeveloperToolkitGlyphRanges::BasicLatin:
+				Ranges.Append({0x0020, 0x007F});
+				break;
+			case EImGuiDeveloperToolkitGlyphRanges::Polish:
+				Ranges.Append({
+					0x0104, 0x0105,	 // Ą, ą
+					0x0106, 0x0107,	 // Ć, ć
+					0x0118, 0x0119,	 // Ę, ę
+					0x0141, 0x0142,	 // Ł, ł
+					0x0143, 0x0144,	 // Ń, ń
+					0x00D3, 0x00D3,	 // Ó
+					0x00F3, 0x00F3,	 // ó
+					0x015A, 0x015B,	 // Ś, ś
+					0x0179, 0x017A,	 // Ź, ź
+					0x017B, 0x017C	 // Ż, ż
+				});
+				break;
+			default:
+				ensureMsgf(false, TEXT("Unexpected enum value: %s"), *EnumValue.GetName());
+				break;
+		}
+	}
+
+	if (!Ranges.IsEmpty())
+	{
+		Ranges.Emplace(0);
+	}
 }
 
 }  // namespace ImGuiDeveloperToolkitConfigurationPrivate
@@ -211,10 +288,12 @@ void FImGuiDeveloperToolkitConfiguration::Tick(const float DeltaTime)
 	}
 }
 
-void FImGuiDeveloperToolkitConfiguration::SetFont(const FUtf8String& Name, const int32 Size)
+void FImGuiDeveloperToolkitConfiguration::SetFont(
+	const FUtf8String& Name, const int32 Size, EImGuiDeveloperToolkitGlyphRanges GlyphRanges)
 {
 	SelectedFont.Name = Name;
 	SelectedFont.Size = Size;
+	SelectedGlyphRanges = static_cast<int32>(GlyphRanges);
 	LoadFonts();
 }
 
@@ -251,6 +330,8 @@ bool FImGuiDeveloperToolkitConfiguration::IsShown(const FAnsiString& ToolName) c
 
 void FImGuiDeveloperToolkitConfiguration::TickFontSelector(const float DeltaTime)
 {
+	ImGui::BeginDisabled(!bFontControlsEnabled);
+
 	const bool bFontChanged = [this]
 	{
 		bool bResult = false;
@@ -277,14 +358,26 @@ void FImGuiDeveloperToolkitConfiguration::TickFontSelector(const float DeltaTime
 		return bResult;
 	}();
 
+	// #TODO_dontcommit: resetting still doesn't work
+	// #TODO_dontcommit: can we have mask return whether the mask changed or was the dropdown committed?
+
+	EImGuiDeveloperToolkitGlyphRanges Mask = static_cast<EImGuiDeveloperToolkitGlyphRanges>(SelectedGlyphRanges);
+	const bool bGlyphRangesChanged = ImGuiDeveloperToolkit::Widgets::Mask("Glyph ranges", Mask);
+	SelectedGlyphRanges = static_cast<int32>(Mask);
+
 	const bool bSizeChanged = ImGui::SliderInt("Font size", &SelectedFont.Size, 8, 32);
 
-	if (bFontChanged || bSizeChanged)
+	ImGui::EndDisabled();
+
+	if (bFontControlsEnabled && (bFontChanged || bGlyphRangesChanged || bSizeChanged))
 	{
+		bFontControlsEnabled = false;
 		LoadFonts().Then(
-			[this, bFontChanged](TFuture<bool>&& SuccessFuture)
+			[this, bFontChanged, bGlyphRangesChanged](TFuture<bool>&& SuccessFuture)
 			{
-				if (!SuccessFuture.Get() || !bFontChanged)
+				bFontControlsEnabled = true;
+
+				if (!SuccessFuture.Get() || !(bFontChanged || bGlyphRangesChanged))
 				{
 					return;
 				}
@@ -334,6 +427,7 @@ void FImGuiDeveloperToolkitConfiguration::TickResetFontPopup(const float DeltaTi
 			if (ImGui::Button(NoBuilder.ToString()) || ShowResetFontPopup_S <= 0.f)
 			{
 				SelectedFont = DefaultFont;
+				SelectedGlyphRanges = 0;
 				bClosePopup = true;
 			}
 
@@ -367,6 +461,8 @@ TFuture<bool> FImGuiDeveloperToolkitConfiguration::LoadFonts()
 	{
 		GConfigurationData->FontName = SelectedFont.Name;
 		GConfigurationData->FontSize = SelectedFont.Size;
+		GConfigurationData->Glyphs =
+			JoinGlyphsAsString(static_cast<EImGuiDeveloperToolkitGlyphRanges>(SelectedGlyphRanges), FAnsiString{"|"});
 	}
 
 	SetSelectedFontDelegateHandle = ImGuiContext->OnPreFrame.AddLambda(
@@ -385,8 +481,14 @@ TFuture<bool> FImGuiDeveloperToolkitConfiguration::LoadFonts()
 
 			IO.Fonts->Clear();
 
+			TArray<ImWchar, TInlineAllocator<8>> GlyphRanges;
+			MakeGlyphRanges(GlyphRanges, static_cast<EImGuiDeveloperToolkitGlyphRanges>(SelectedGlyphRanges));
+
 			DefaultFont.Font = IO.Fonts->AddFontFromFileTTF(
-				reinterpret_cast<const char*>(*DefaultFontPath), FImGuiContext::DefaultFontSize);
+				reinterpret_cast<const char*>(*DefaultFontPath),
+				FImGuiContext::DefaultFontSize,
+				nullptr,
+				GlyphRanges.IsEmpty() ? nullptr : GlyphRanges.GetData());
 			if (DefaultFont.Font == nullptr)
 			{
 				DefaultFont.Font = IO.Fonts->AddFontDefault();
@@ -394,8 +496,11 @@ TFuture<bool> FImGuiDeveloperToolkitConfiguration::LoadFonts()
 
 			if (FontPath != nullptr)
 			{
-				SelectedFont.Font =
-					IO.Fonts->AddFontFromFileTTF(reinterpret_cast<const char*>(**FontPath), SelectedFont.Size);
+				SelectedFont.Font = IO.Fonts->AddFontFromFileTTF(
+					reinterpret_cast<const char*>(**FontPath),
+					SelectedFont.Size,
+					nullptr,
+					GlyphRanges.IsEmpty() ? nullptr : GlyphRanges.GetData());
 			}
 			else
 			{

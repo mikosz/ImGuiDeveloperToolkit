@@ -9,6 +9,18 @@
 // ReSharper disable once CppUE4CodingStandardNamingViolationWarning
 struct ImFont;
 
+UENUM()
+enum class EImGuiDeveloperToolkitGlyphRanges : uint8
+{
+	None = 0 UMETA(Hidden),
+	/// Basic Latin letters, digits, punctuation
+	BasicLatin = 0b1,
+	/// Polish national diacritics
+	Polish = 0b1 << 1,
+};
+
+ENUM_CLASS_FLAGS(EImGuiDeveloperToolkitGlyphRanges);
+
 USTRUCT()
 struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitFont
 {
@@ -35,7 +47,7 @@ struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitConfiguration
 
 	void Tick(float DeltaTime);
 
-	void SetFont(const FUtf8String& Name, int32 Size);
+	void SetFont(const FUtf8String& Name, int32 Size, EImGuiDeveloperToolkitGlyphRanges GlyphRanges);
 
 	ImFont* GetFont() const;
 
@@ -44,10 +56,17 @@ struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitConfiguration
 	bool IsShown(const FAnsiString& ToolName) const;
 
 private:
-	UPROPERTY(Transient, VisibleAnywhere) TMap<FUtf8String, FUtf8String> AvailableFontPathsByName;
+	UPROPERTY(Transient, VisibleAnywhere)
+	TMap<FUtf8String, FUtf8String> AvailableFontPathsByName;
+
+	UPROPERTY(VisibleAnywhere)
+	bool bFontControlsEnabled = true;
 
 	UPROPERTY(VisibleAnywhere)
 	FImGuiDeveloperToolkitFont SelectedFont;
+
+	UPROPERTY(VisibleAnywhere, meta = (Bitmask, BitmaskEnum = "EImGuiDeveloperToolkitGlyphRanges"))
+	int32 SelectedGlyphRanges = 0;
 
 	UPROPERTY(VisibleAnywhere)
 	FImGuiDeveloperToolkitFont DefaultFont;

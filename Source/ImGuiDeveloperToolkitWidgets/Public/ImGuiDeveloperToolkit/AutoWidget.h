@@ -93,8 +93,16 @@ constexpr ImGuiDataType_ TImGuiScalarDataType_V = TImGuiScalarInfo<T>::DataType;
 
 }  // namespace Private
 
-bool AutoWidget(const char* Label, const UEnum& Enum, int64& EnumValue);
-bool AutoWidget(const char* Label, const UEnum& Enum, const int64& EnumValue);
+enum class EEnumValueType
+{
+	EnumValue,
+	Mask,
+};
+
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(
+	const char* Label, const UEnum& Enum, int64& EnumValue, EEnumValueType ValueType = EEnumValueType::EnumValue);
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(
+	const char* Label, const UEnum& Enum, const int64& EnumValue, EEnumValueType ValueType = EEnumValueType::EnumValue);
 
 template <class T UE_REQUIRES(TIsUEnumClass<std::decay_t<T>>::Value)>
 bool AutoWidget(const char* Label, T& EnumValue)
@@ -105,18 +113,35 @@ bool AutoWidget(const char* Label, T& EnumValue)
 		return false;
 	}
 
-	return AutoWidget(Label, *Enum, EnumValue);
+	return AutoWidget(Label, *Enum, EnumValue, EEnumValueType::EnumValue);
 }
 
-bool AutoWidget(const char* Label, bool& BoolValue);
-bool AutoWidget(const char* Label, const bool& BoolValue);
+template <class MaskEnumClass UE_REQUIRES(TIsUEnumClass<MaskEnumClass>::Value)>
+bool Mask(const char* Label, MaskEnumClass& Mask)
+{
+	const UEnum* Enum = StaticEnum<MaskEnumClass>();
 
-bool AutoWidget(const char* Label, FUtf8String& Utf8StringValue);
-bool AutoWidget(const char* Label, const FUtf8String& Utf8StringValue);
-bool AutoWidget(const char* Label, FUtf8StringView Utf8StringValue);
+	if (!IsValid(Enum))
+	{
+		return false;
+	}
 
-bool AutoWidget(const char* Label, FString& StringValue);
-bool AutoWidget(const char* Label, const FString& StringValue);
+	int64 MaskValue = static_cast<int64>(Mask);
+	const bool bResult = AutoWidget(Label, *Enum, MaskValue, EEnumValueType::Mask);
+	Mask = static_cast<MaskEnumClass>(MaskValue);
+
+	return bResult;
+}
+
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, bool& BoolValue);
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, const bool& BoolValue);
+
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, FUtf8String& Utf8StringValue);
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, const FUtf8String& Utf8StringValue);
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, FUtf8StringView Utf8StringValue);
+
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, FString& StringValue);
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, const FString& StringValue);
 
 template <class CharType>
 bool AutoWidget(const char* Label, TStringView<CharType> StringValue)

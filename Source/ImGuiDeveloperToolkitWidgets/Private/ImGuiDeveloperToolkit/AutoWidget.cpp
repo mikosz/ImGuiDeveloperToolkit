@@ -1,5 +1,6 @@
 ﻿#include "ImGuiDeveloperToolkit/AutoWidget.h"
 
+#include "ImGuiDeveloperToolkit/Private/EnumValueRange.h"
 #include "ImGuiDeveloperToolkit/Private/TypeTraits.h"
 
 #include <type_traits>
@@ -35,7 +36,7 @@ struct TImGuiTextCallback
 			return 1;
 		}
 
-		TImGuiTextCallback& This = *static_cast<TImGuiTextCallback*>(Data->UserData);
+		const TImGuiTextCallback& This = *static_cast<TImGuiTextCallback*>(Data->UserData);
 
 		switch (Data->EventFlag)
 		{
@@ -51,40 +52,56 @@ struct TImGuiTextCallback
 };
 
 template <class T UE_REQUIRES(std::is_same_v<std::decay_t<T>, int64>)>
-bool AutoWidget(const char* Label, const UEnum& Enum, T& EnumValue)
+bool AutoWidget(const char* Label, const UEnum& Enum, T& EnumValue, EEnumValueType ValueType)
 {
+	using namespace ImGuiDeveloperToolkit::Private;
+
 	bool bResult = false;
 
-	const FText PreviewDisplayName = Enum.IsValidEnumValue(EnumValue)
-										 ? Enum.GetDisplayNameTextByValue(EnumValue)
-										 : LOCTEXT("DefaultEnumPreviewValue", "Select value");
-	const FUtf8String PreviewDisplayNameUtf8 = FUtf8String{StringCast<UTF8CHAR>(*PreviewDisplayName.ToString())};
+	const FUtf8String PreviewDisplayName = [&Enum, EnumValue, ValueType]
+	{
+		if (ValueType == EEnumValueType::Mask)
+		{
+			const FString Preview = FString::JoinBy(
+				FMaskEnumValueRange{&Enum, EnumValue},
+				TEXT(", "),
+				[](const FEnumValue& V) { return V.GetDisplayName().ToString(); });
+			return FUtf8String{StringCast<UTF8CHAR>(*Preview)};
+		}
 
-	constexpr bool bIsConst = ImGuiDeveloperToolkit::Private::TValueTypeIsConst_v<T>;
+		const FText Result = Enum.IsValidEnumValue(EnumValue) ? Enum.GetDisplayNameTextByValue(EnumValue)
+															  : LOCTEXT("DefaultEnumPreviewValue", "Select value");
+		return FUtf8String{Result.ToString()};
+	}();
+	constexpr bool bIsConst = TValueTypeIsConst_v<T>;
 
 	ImGui::BeginDisabled(bIsConst);
 
-	if (ImGui::BeginCombo(Label, reinterpret_cast<const char*>(*PreviewDisplayNameUtf8)))
+	if (ImGui::BeginCombo(Label, reinterpret_cast<const char*>(*PreviewDisplayName)))
 	{
-		const int32 NumEnums = Enum.NumEnums() - (Enum.ContainsExistingMax() ? 1 : 0);
-		for (int32 Index = 0; Index < NumEnums; ++Index)
+		for (FEnumValueIterator It{&Enum}; It; ++It)
 		{
-			const int64 Value = Enum.GetValueByIndex(Index);
-			const FText DisplayName = Enum.GetDisplayNameTextByIndex(Index);
+			const int64 Value = It->GetValue();
+			const FText DisplayName = It->GetDisplayName();
 			const FUtf8String DisplayNameUtf8{StringCast<UTF8CHAR>(*DisplayName.ToString())};
 
-			if (ImGui::Selectable(reinterpret_cast<const char*>(*DisplayNameUtf8), EnumValue == Value))
+			const bool bSelected = (ValueType == EEnumValueType::Mask ? (EnumValue & Value) != 0 : EnumValue == Value);
+
+			if (ImGui::Selectable(
+					reinterpret_cast<const char*>(*DisplayNameUtf8),
+					bSelected,
+					(ValueType == EEnumValueType::Mask) ? ImGuiSelectableFlags_NoAutoClosePopups : 0))
 			{
 				if constexpr (!bIsConst)
 				{
-					EnumValue = Value;
+					EnumValue = ((ValueType == EEnumValueType::Mask) ? (EnumValue ^ Value) : Value);
 					bResult = true;
 				}
 			}
 
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 			{
-				if (const FText ToolTip = Enum.GetToolTipTextByIndex(Index); !ToolTip.IsEmpty())
+				if (const FText ToolTip = Enum.GetToolTipTextByIndex(It->GetIndex()); !ToolTip.IsEmpty())
 				{
 					const FUtf8String ToolTipUtf8{StringCast<UTF8CHAR>(*ToolTip.ToString())};
 					ImGui::SetTooltip(reinterpret_cast<const char*>(*ToolTipUtf8));
@@ -121,7 +138,7 @@ bool AutoWidget(const char* Label, const UEnum& Enum, T& EnumValue)
 				if (!PreviewValueToolTipUtf8.IsEmpty())
 				{
 					ImGui::TextColored(
-						ImVec4{.7f, .7f, .7f, 1.f}, "%s: ", reinterpret_cast<const char*>(*PreviewDisplayNameUtf8));
+						ImVec4{.7f, .7f, .7f, 1.f}, "%s: ", reinterpret_cast<const char*>(*PreviewDisplayName));
 					ImGui::Text(reinterpret_cast<const char*>(*PreviewValueToolTipUtf8));
 				}
 
@@ -138,14 +155,14 @@ bool AutoWidget(const char* Label, const UEnum& Enum, T& EnumValue)
 
 }  // namespace Private
 
-bool AutoWidget(const char* Label, const UEnum& Enum, int64& EnumValue)
+bool AutoWidget(const char* Label, const UEnum& Enum, int64& EnumValue, EEnumValueType ValueType)
 {
-	return Private::AutoWidget(Label, Enum, EnumValue);
+	return Private::AutoWidget(Label, Enum, EnumValue, ValueType);
 }
 
-bool AutoWidget(const char* Label, const UEnum& Enum, const int64& EnumValue)
+bool AutoWidget(const char* Label, const UEnum& Enum, const int64& EnumValue, EEnumValueType ValueType)
 {
-	return Private::AutoWidget(Label, Enum, EnumValue);
+	return Private::AutoWidget(Label, Enum, EnumValue, ValueType);
 }
 
 bool AutoWidget(const char* Label, bool& BoolValue)
@@ -180,7 +197,7 @@ bool AutoWidget(const char* Label, FUtf8String& Utf8StringValue)
 			&CallbackUserData.InputTextCallback,
 			&CallbackUserData))
 	{
-		Utf8StringValue = FUtf8StringView{CharBuf.GetData(), CharBuf.Num() - 1};  // no null terminator for view
+		Utf8StringValue = CharBuf.GetData();  // no null terminator for view
 		return true;
 	}
 

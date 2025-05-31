@@ -39,6 +39,7 @@ public class ImGuiDeveloperToolkitSubsystem : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"ImGui",
+				"ImGuiDeveloperToolkitWidgets",
 				"Slate",
 				"SlateCore"
 				// ... add private dependencies that you statically link with here ...	
