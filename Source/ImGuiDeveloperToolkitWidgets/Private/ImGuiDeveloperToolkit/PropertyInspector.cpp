@@ -28,6 +28,8 @@ template <class ChangeFunctionType>
 void EmitPropertyChangeNotifications(
 	const FPropertyAccessChangeNotify& ChangeNotify, const bool bIdenticalValue, ChangeFunctionType&& ChangeFunction)
 {
+	// #TODO_dontcommit: transaction!
+
 	PropertyAccessUtil::EmitPreChangeNotify(&ChangeNotify, bIdenticalValue);
 	if (!bIdenticalValue)
 	{
@@ -36,6 +38,13 @@ void EmitPropertyChangeNotifications(
 	PropertyAccessUtil::EmitPostChangeNotify(&ChangeNotify, bIdenticalValue);
 }
 
+template <class T>
+void Inspect(
+	const char* Label,
+	TFieldIterator<FProperty> FieldIterator,
+	FPropertyAccessChangeNotify& ChangeNotify,
+	T* Instance,
+	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject);
 template <class T>
 void Inspect(
 	const char* Label,
@@ -60,6 +69,54 @@ void Inspect(
 
 template <class T, class OuterType, class Enable = void>
 struct FTryInspect;
+
+template <class OuterType>
+struct FTryInspect<FStrProperty, OuterType>
+{
+	bool operator()(
+		const char* Label,
+		FProperty& Property,
+		FPropertyAccessChangeNotify& ChangeNotify,
+		OuterType* Outer,
+		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject) const
+	{
+		FStrProperty* const StrProperty = ExactCastField<FStrProperty>(&Property);
+		if (!StrProperty)
+		{
+			return false;
+		}
+
+		ImGui::TableNextRow();
+
+		ImGui::TableNextColumn();
+		ImGui::Text("%s", Label);
+
+		ImGui::TableNextColumn();
+
+		constexpr bool bIsConst = TIsConst<OuterType>::Value;
+
+		auto* Ptr =
+			StrProperty->ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, FString>>(
+				Outer);
+		const FString& OldValue = StrProperty->GetPropertyValue(Ptr);
+		FString Value = OldValue;
+
+		ImGui::BeginDisabled(bIsConst);
+		ImGui::PushID(Label);
+		if (Widgets::AutoWidget("", Value))
+		{
+			if constexpr (!bIsConst)
+			{
+				EmitPropertyChangeNotifications(
+					ChangeNotify, OldValue == Value, [=] { StrProperty->SetPropertyValue(Ptr, Value); });
+			}
+		}
+		ImGui::PopID();
+		ImGui::EndDisabled();
+
+		return true;
+	}
+};
 
 template <class OuterType>
 struct FTryInspect<FBoolProperty, OuterType>
@@ -87,11 +144,10 @@ struct FTryInspect<FBoolProperty, OuterType>
 		constexpr bool bIsConst = TIsConst<OuterType>::Value;
 
 		auto* Ptr =
-			BoolProperty
-				->template ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, bool>>(
-					Outer);
-		bool Value = BoolProperty->GetPropertyValue(Ptr);
-		const bool OldValue = Value;
+			BoolProperty->ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, bool>>(
+				Outer);
+		const bool OldValue = BoolProperty->GetPropertyValue(Ptr);
+		bool Value = OldValue;
 
 		ImGui::BeginDisabled(bIsConst);
 		ImGui::PushID(Label);
@@ -374,6 +430,105 @@ struct FTryInspect<FStructProperty, OuterType>
 	}
 };
 
+template <class OuterType>
+struct FTryInspect<FObjectProperty, OuterType>
+{
+	bool operator()(
+		const char* Label,
+		FProperty& Property,
+		FPropertyAccessChangeNotify& ChangeNotify,
+		OuterType* Outer,
+		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject) const
+	{
+		FObjectProperty* const ObjectProperty = CastField<FObjectProperty>(&Property);
+		if (!ObjectProperty)
+		{
+			return false;
+		}
+
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		const bool bShowElements = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanFullWidth);
+		ImGui::TableNextColumn();
+
+		using QualifiedPointerType = ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>*;
+
+		QualifiedPointerType Object = ObjectProperty->GetObjectPropertyValue_InContainer(Outer);
+		if (!IsValid(Object))
+		{
+			const char* const PropertyTypeDisplayName =
+				reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*ObjectProperty->PropertyClass->GetName()).Get());
+			ImGui::Text("{%s*} nullptr", PropertyTypeDisplayName);
+			if (bShowElements)
+			{
+				ImGui::TreePop();
+			}
+			return true;
+		}
+
+		UClass* Class = Object->GetClass();
+
+		const char* const ClassDisplayName =
+			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Class->GetName()).Get());
+		const char* const ObjectDisplayName =
+			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Object->GetName()).Get());
+		ImGui::Text(R"({%s*} 0x%p "%s")", ClassDisplayName, Object, ObjectDisplayName);
+
+		if (bShowElements)
+		{
+			Inspect(Label, TFieldIterator<FProperty>{Class}, ChangeNotify, Object, Object);
+			ImGui::TreePop();
+		}
+
+		return true;
+	}
+};
+
+// #TODO_dontcommit: pointer to const object field does not respect constness!
+
+template <class T>
+void Inspect(
+	const char* Label,
+	TFieldIterator<FProperty> FieldIterator,
+	FPropertyAccessChangeNotify& ChangeNotify,
+	T* Instance,
+	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject)
+{
+	for (; FieldIterator; ++FieldIterator)
+	{
+		FProperty* const Property = *FieldIterator;
+
+		if (!Property)
+		{
+			continue;
+		}
+
+		const char* const PropertyName =
+			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Property->GetName()).Get());
+		const char* const DisplayName =
+			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Property->GetDisplayNameText().ToString()).Get());
+
+		auto* PreviousActiveNode = ChangeNotify.ChangedPropertyChain.GetActiveNode();
+		FProperty* PreviousActiveProperty = PreviousActiveNode ? PreviousActiveNode->GetValue() : nullptr;
+
+		auto* PreviousActiveMemberNode = ChangeNotify.ChangedPropertyChain.GetActiveMemberNode();
+		FProperty* PreviousActiveMemberProperty =
+			PreviousActiveMemberNode ? PreviousActiveMemberNode->GetValue() : nullptr;
+
+		ChangeNotify.ChangedPropertyChain.AddHead(Property);
+		ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(Property);
+		ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(Property);
+
+		ImGui::PushID(PropertyName);
+		Inspect(DisplayName, *Property, ChangeNotify, Instance, OuterObject);
+		ImGui::PopID();
+
+		ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(PreviousActiveMemberProperty);
+		ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(PreviousActiveProperty);
+		ChangeNotify.ChangedPropertyChain.RemoveNode(Property);
+	}
+}
+
 template <class T>
 void Inspect(
 	const char* Label,
@@ -415,10 +570,12 @@ void Inspect(
 		|| FTryInspect<FUInt32Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
 		|| FTryInspect<FUInt64Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
 		// Other properties
+		|| FTryInspect<FStrProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
 		|| FTryInspect<FBoolProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
 		|| FTryInspect<FArrayProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
 		|| FTryInspect<FEnumProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
-		|| FTryInspect<FStructProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject))
+		|| FTryInspect<FStructProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject)
+		|| FTryInspect<FObjectProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject))
 	{
 		return;
 	}
@@ -455,45 +612,13 @@ void Inspect(
 		return;
 	}
 
-	for (TFieldIterator<FProperty> It(&Struct); It; ++It)
-	{
-		FProperty* const Property = *It;
-
-		if (!Property)
-		{
-			continue;
-		}
-
-		const char* const PropertyName =
-			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Property->GetName()).Get());
-		const char* const DisplayName =
-			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Property->GetDisplayNameText().ToString()).Get());
-
-		auto* PreviousActiveNode = ChangeNotify.ChangedPropertyChain.GetActiveNode();
-		FProperty* PreviousActiveProperty = PreviousActiveNode ? PreviousActiveNode->GetValue() : nullptr;
-
-		auto* PreviousActiveMemberNode = ChangeNotify.ChangedPropertyChain.GetActiveMemberNode();
-		FProperty* PreviousActiveMemberProperty =
-			PreviousActiveMemberNode ? PreviousActiveMemberNode->GetValue() : nullptr;
-
-		ChangeNotify.ChangedPropertyChain.AddHead(Property);
-		ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(Property);
-		ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(Property);
-
-		ImGui::PushID(PropertyName);
-		Inspect(DisplayName, *Property, ChangeNotify, Instance, OuterObject);
-		ImGui::PopID();
-
-		ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(PreviousActiveMemberProperty);
-		ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(PreviousActiveProperty);
-		ChangeNotify.ChangedPropertyChain.RemoveNode(Property);
-	}
+	Inspect(Label, TFieldIterator<FProperty>(&Struct), ChangeNotify, Instance, OuterObject);
 
 	ImGui::TreePop();
 }
 
 template <class T>
-void InspectObject(
+void CreateKeyValueTableAndInspect(
 	const char* Label,
 	const UStruct& Struct,
 	FPropertyAccessChangeNotify& ChangeNotify,
@@ -525,14 +650,14 @@ void Inspect(const char* Label, const UStruct& Struct, void* Instance, UObject* 
 	FPropertyAccessChangeNotify ChangeNotify;
 	ChangeNotify.ChangedObject = OuterObject;
 
-	Private::InspectObject(Label, Struct, ChangeNotify, Instance, OuterObject);
+	Private::CreateKeyValueTableAndInspect(Label, Struct, ChangeNotify, Instance, OuterObject);
 }
 
 void Inspect(const char* Label, const UStruct& Struct, const void* Instance, const UObject* OuterObject)
 {
 	FPropertyAccessChangeNotify ChangeNotify;
 
-	Private::InspectObject(Label, Struct, ChangeNotify, Instance, OuterObject);
+	Private::CreateKeyValueTableAndInspect(Label, Struct, ChangeNotify, Instance, OuterObject);
 }
 
 void Inspect(const char* Label, const UClass& Class, UObject& Instance)
@@ -540,14 +665,14 @@ void Inspect(const char* Label, const UClass& Class, UObject& Instance)
 	FPropertyAccessChangeNotify ChangeNotify;
 	ChangeNotify.ChangedObject = &Instance;
 
-	Private::InspectObject(Label, Class, ChangeNotify, &Instance, &Instance);
+	Private::CreateKeyValueTableAndInspect(Label, Class, ChangeNotify, &Instance, &Instance);
 }
 
 void Inspect(const char* Label, const UClass& Class, const UObject& Instance)
 {
 	FPropertyAccessChangeNotify ChangeNotify;
 
-	Private::InspectObject(Label, Class, ChangeNotify, &Instance, &Instance);
+	Private::CreateKeyValueTableAndInspect(Label, Class, ChangeNotify, &Instance, &Instance);
 }
 
 }  // namespace ImGuiDeveloperToolkit::PropertyInspector

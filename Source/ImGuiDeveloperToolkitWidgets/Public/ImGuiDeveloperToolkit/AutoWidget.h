@@ -111,6 +111,20 @@ bool AutoWidget(const char* Label, T& EnumValue)
 bool AutoWidget(const char* Label, bool& BoolValue);
 bool AutoWidget(const char* Label, const bool& BoolValue);
 
+bool AutoWidget(const char* Label, FUtf8String& Utf8StringValue);
+bool AutoWidget(const char* Label, const FUtf8String& Utf8StringValue);
+bool AutoWidget(const char* Label, FUtf8StringView Utf8StringValue);
+
+bool AutoWidget(const char* Label, FString& StringValue);
+bool AutoWidget(const char* Label, const FString& StringValue);
+
+template <class CharType>
+bool AutoWidget(const char* Label, TStringView<CharType> StringValue)
+{
+	FUtf8String Utf8String{StringValue};
+	return AutoWidget(Label, Utf8String);
+}
+
 template <class NumericType UE_REQUIRES(std::is_arithmetic_v<NumericType>)>
 bool AutoWidget(const char* Label, NumericType& NumericValue, NumericType Step, NumericType StepFast)
 {

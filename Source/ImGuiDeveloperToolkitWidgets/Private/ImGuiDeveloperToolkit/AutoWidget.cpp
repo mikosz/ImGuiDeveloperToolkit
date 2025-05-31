@@ -23,6 +23,33 @@ const char* const TImGuiScalarInfo<uint64>::Format = "%llu";
 const char* const TImGuiScalarInfo<float>::Format = "%f";
 const char* const TImGuiScalarInfo<double>::Format = "%g";
 
+template <class BufType>
+struct TImGuiTextCallback
+{
+	BufType& CharBuf;
+
+	static int InputTextCallback(ImGuiInputTextCallbackData* Data)
+	{
+		if (!ensure(Data != nullptr && Data->UserData != nullptr))
+		{
+			return 1;
+		}
+
+		TImGuiTextCallback& This = *static_cast<TImGuiTextCallback*>(Data->UserData);
+
+		switch (Data->EventFlag)
+		{
+			case ImGuiInputTextFlags_CallbackResize:
+				This.CharBuf.SetNum(Data->BufSize);
+				break;
+			default:
+				break;
+		}
+
+		return 0;
+	}
+};
+
 template <class T UE_REQUIRES(std::is_same_v<std::decay_t<T>, int64>)>
 bool AutoWidget(const char* Label, const UEnum& Enum, T& EnumValue)
 {
@@ -135,6 +162,59 @@ bool AutoWidget(const char* Label, const bool& BoolValue)
 	ImGui::EndDisabled();
 
 	return bResult;
+}
+
+bool AutoWidget(const char* Label, FUtf8String& Utf8StringValue)
+{
+	TArray<char, TInlineAllocator<128>> CharBuf;
+	const TArray<UTF8CHAR>& UTF8Chars = Utf8StringValue.GetCharArray();
+	CharBuf.Reserve(UTF8Chars.Num());
+	Algo::Transform(UTF8Chars, CharBuf, [](const UTF8CHAR Char) { return static_cast<char>(Char); });
+
+	Private::TImGuiTextCallback CallbackUserData{CharBuf};
+	if (ImGui::InputText(
+			Label,
+			CharBuf.GetData(),
+			CharBuf.Num(),
+			ImGuiInputTextFlags_CallbackResize,
+			&CallbackUserData.InputTextCallback,
+			&CallbackUserData))
+	{
+		Utf8StringValue = FUtf8StringView{CharBuf.GetData(), CharBuf.Num() - 1};  // no null terminator for view
+		return true;
+	}
+
+	return false;
+}
+
+bool AutoWidget(const char* Label, const FUtf8StringView Utf8StringValue)
+{
+	TArray<char, TInlineAllocator<128>> CharBuf;
+	CharBuf.Reserve(Utf8StringValue.NumBytes());
+	Algo::Transform(Utf8StringValue, CharBuf, [](const UTF8CHAR Char) { return static_cast<char>(Char); });
+
+	ImGui::BeginDisabled();
+	const bool bResult = ImGui::InputText(Label, CharBuf.GetData(), CharBuf.Num());
+	ImGui::EndDisabled();
+
+	return bResult;
+}
+
+bool AutoWidget(const char* Label, FString& StringValue)
+{
+	FUtf8String Utf8String{StringValue};
+	if (AutoWidget(Label, Utf8String))
+	{
+		StringValue = FString{Utf8String};
+		return true;
+	}
+
+	return false;
+}
+
+bool AutoWidget(const char* Label, const FString& StringValue)
+{
+	return AutoWidget(Label, TStringView{StringValue});
 }
 
 }  // namespace ImGuiDeveloperToolkit::Widgets
