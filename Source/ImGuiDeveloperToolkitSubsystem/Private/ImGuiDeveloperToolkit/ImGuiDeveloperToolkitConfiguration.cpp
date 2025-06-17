@@ -112,7 +112,7 @@ static void ConfigurationHandler_ApplyAll(ImGuiContext* Ctx, ImGuiSettingsHandle
 		const UEnum* Enum = StaticEnum<EImGuiDeveloperToolkitGlyphRanges>();
 		if (!ensure(IsValid(Enum)))
 		{
-			return EImGuiDeveloperToolkitGlyphRanges::None;
+			return EImGuiDeveloperToolkitGlyphRanges::Default;
 		}
 
 		TArray<FAnsiString> GlyphNames;
@@ -212,6 +212,23 @@ void MakeGlyphRanges(ArrayType& Ranges, const EImGuiDeveloperToolkitGlyphRanges 
 
 }  // namespace ImGuiDeveloperToolkitConfigurationPrivate
 
+UImGuiDeveloperToolkitSettings* UImGuiDeveloperToolkitSettings::GetDefault()
+{
+	return ::GetMutableDefault<UImGuiDeveloperToolkitSettings>();
+}
+
+UImGuiDeveloperToolkitSettings* UImGuiDeveloperToolkitSettings::GetUser()
+{
+	if (!IsValid(UserSettings.Get()))
+	{
+		UserSettings.Reset(DuplicateObject(GetDefault(), nullptr, "ImGuiDeveloperToolkitSettings_User"));
+	}
+
+	return UserSettings.Get();
+}
+
+TStrongObjectPtr<UImGuiDeveloperToolkitSettings> UImGuiDeveloperToolkitSettings::UserSettings;
+
 void FImGuiDeveloperToolkitConfiguration::Initialize()
 {
 	using namespace ImGuiDeveloperToolkitConfigurationPrivate;
@@ -293,7 +310,7 @@ void FImGuiDeveloperToolkitConfiguration::SetFont(
 {
 	SelectedFont.Name = Name;
 	SelectedFont.Size = Size;
-	SelectedGlyphRanges = static_cast<int32>(GlyphRanges);
+	SelectedFont.GlyphRanges = static_cast<int32>(GlyphRanges);
 	LoadFonts();
 }
 
@@ -361,9 +378,9 @@ void FImGuiDeveloperToolkitConfiguration::TickFontSelector(const float DeltaTime
 	// #TODO_dontcommit: resetting still doesn't work
 	// #TODO_dontcommit: can we have mask return whether the mask changed or was the dropdown committed?
 
-	EImGuiDeveloperToolkitGlyphRanges Mask = static_cast<EImGuiDeveloperToolkitGlyphRanges>(SelectedGlyphRanges);
+	EImGuiDeveloperToolkitGlyphRanges Mask = static_cast<EImGuiDeveloperToolkitGlyphRanges>(SelectedFont.GlyphRanges);
 	const bool bGlyphRangesChanged = ImGuiDeveloperToolkit::Widgets::Mask("Glyph ranges", Mask);
-	SelectedGlyphRanges = static_cast<int32>(Mask);
+	SelectedFont.GlyphRanges = static_cast<int32>(Mask);
 
 	const bool bSizeChanged = ImGui::SliderInt("Font size", &SelectedFont.Size, 8, 32);
 
@@ -427,7 +444,6 @@ void FImGuiDeveloperToolkitConfiguration::TickResetFontPopup(const float DeltaTi
 			if (ImGui::Button(NoBuilder.ToString()) || ShowResetFontPopup_S <= 0.f)
 			{
 				SelectedFont = DefaultFont;
-				SelectedGlyphRanges = 0;
 				bClosePopup = true;
 			}
 
@@ -461,8 +477,8 @@ TFuture<bool> FImGuiDeveloperToolkitConfiguration::LoadFonts()
 	{
 		GConfigurationData->FontName = SelectedFont.Name;
 		GConfigurationData->FontSize = SelectedFont.Size;
-		GConfigurationData->Glyphs =
-			JoinGlyphsAsString(static_cast<EImGuiDeveloperToolkitGlyphRanges>(SelectedGlyphRanges), FAnsiString{"|"});
+		GConfigurationData->Glyphs = JoinGlyphsAsString(
+			static_cast<EImGuiDeveloperToolkitGlyphRanges>(SelectedFont.GlyphRanges), FAnsiString{"|"});
 	}
 
 	SetSelectedFontDelegateHandle = ImGuiContext->OnPreFrame.AddLambda(
@@ -482,7 +498,7 @@ TFuture<bool> FImGuiDeveloperToolkitConfiguration::LoadFonts()
 			IO.Fonts->Clear();
 
 			TArray<ImWchar, TInlineAllocator<8>> GlyphRanges;
-			MakeGlyphRanges(GlyphRanges, static_cast<EImGuiDeveloperToolkitGlyphRanges>(SelectedGlyphRanges));
+			MakeGlyphRanges(GlyphRanges, static_cast<EImGuiDeveloperToolkitGlyphRanges>(SelectedFont.GlyphRanges));
 
 			DefaultFont.Font = IO.Fonts->AddFontFromFileTTF(
 				reinterpret_cast<const char*>(*DefaultFontPath),

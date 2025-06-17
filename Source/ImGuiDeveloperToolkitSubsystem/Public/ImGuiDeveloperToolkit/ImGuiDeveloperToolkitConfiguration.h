@@ -12,7 +12,7 @@ struct ImFont;
 UENUM()
 enum class EImGuiDeveloperToolkitGlyphRanges : uint8
 {
-	None = 0 UMETA(Hidden),
+	Default = 0 UMETA(Hidden),
 	/// Basic Latin letters, digits, punctuation
 	BasicLatin = 0b1,
 	/// Polish national diacritics
@@ -26,13 +26,37 @@ struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitFont
 {
 	GENERATED_BODY();
 
-	UPROPERTY(VisibleAnywhere)
-	FUtf8String Name;
+	UPROPERTY(EditAnywhere)
+	FUtf8String Name = "Roboto-Regular";
 
-	UPROPERTY(VisibleAnywhere)
-	int32 Size = -1;
+	UPROPERTY(EditAnywhere)
+	int32 Size = 14;
+
+	UPROPERTY(VisibleAnywhere, meta = (Bitmask, BitmaskEnum = "EImGuiDeveloperToolkitGlyphRanges"))
+	int32 GlyphRanges = 0;
 
 	ImFont* Font = nullptr;
+};
+
+UCLASS(Config = "ImGuiDevelopersToolkit", PerObjectConfig)
+class UImGuiDeveloperToolkitSettings : public UObject
+{
+	GENERATED_BODY()
+public:
+	static UImGuiDeveloperToolkitSettings* GetDefault();
+
+	static UImGuiDeveloperToolkitSettings* GetUser();
+
+	UPROPERTY(EditAnywhere, Config)
+	TArray<FString> OpenTools;
+
+	UPROPERTY(EditAnywhere, Config)
+	FImGuiDeveloperToolkitFont Font;
+
+private:
+	static TStrongObjectPtr<UImGuiDeveloperToolkitSettings> UserSettings;
+
+	UImGuiDeveloperToolkitSettings() = default;
 };
 
 USTRUCT()
@@ -64,12 +88,6 @@ private:
 
 	UPROPERTY(VisibleAnywhere)
 	FImGuiDeveloperToolkitFont SelectedFont;
-
-	UPROPERTY(VisibleAnywhere, meta = (Bitmask, BitmaskEnum = "EImGuiDeveloperToolkitGlyphRanges"))
-	int32 SelectedGlyphRanges = 0;
-
-	UPROPERTY(VisibleAnywhere)
-	FImGuiDeveloperToolkitFont DefaultFont;
 
 	UPROPERTY(VisibleAnywhere)
 	FImGuiDeveloperToolkitFont PreviousFont;
