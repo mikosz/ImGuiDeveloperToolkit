@@ -117,7 +117,7 @@ bool AutoWidget(const char* Label, T& EnumValue)
 }
 
 template <class MaskEnumClass UE_REQUIRES(TIsUEnumClass<MaskEnumClass>::Value)>
-bool Mask(const char* Label, MaskEnumClass& Mask)
+bool Mask(const char* Label, MaskEnumClass& InOutMaskValue)
 {
 	const UEnum* Enum = StaticEnum<MaskEnumClass>();
 
@@ -126,9 +126,9 @@ bool Mask(const char* Label, MaskEnumClass& Mask)
 		return false;
 	}
 
-	int64 MaskValue = static_cast<int64>(Mask);
+	int64 MaskValue = static_cast<int64>(InOutMaskValue);
 	const bool bResult = AutoWidget(Label, *Enum, MaskValue, EEnumValueType::Mask);
-	Mask = static_cast<MaskEnumClass>(MaskValue);
+	InOutMaskValue = static_cast<MaskEnumClass>(MaskValue);
 
 	return bResult;
 }

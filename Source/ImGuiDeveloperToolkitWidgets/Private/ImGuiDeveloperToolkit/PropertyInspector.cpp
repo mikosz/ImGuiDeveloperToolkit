@@ -440,7 +440,9 @@ struct FTryInspect<FObjectProperty, OuterType>
 		OuterType* Outer,
 		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject) const
 	{
-		FObjectProperty* const ObjectProperty = CastField<FObjectProperty>(&Property);
+		// #TODO #PropertyInspector: would be cool to allow modification of at least the address, but potentially
+		// some sort of an object picker?
+		const FObjectProperty* const ObjectProperty = CastField<FObjectProperty>(&Property);
 		if (!ObjectProperty)
 		{
 			return false;
@@ -466,7 +468,7 @@ struct FTryInspect<FObjectProperty, OuterType>
 			return true;
 		}
 
-		UClass* Class = Object->GetClass();
+		const UClass* const Class = Object->GetClass();
 
 		const char* const ClassDisplayName =
 			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Class->GetName()).Get());
@@ -483,8 +485,6 @@ struct FTryInspect<FObjectProperty, OuterType>
 		return true;
 	}
 };
-
-// #TODO_dontcommit: pointer to const object field does not respect constness!
 
 template <class T>
 void Inspect(

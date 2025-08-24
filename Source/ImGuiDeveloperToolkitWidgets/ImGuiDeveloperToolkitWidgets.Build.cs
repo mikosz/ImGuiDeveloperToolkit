@@ -17,6 +17,7 @@ public class ImGuiDeveloperToolkitWidgets : ModuleRules
 			new[]
 			{
 				"CoreUObject",
+				"DeveloperSettings",
 				"Engine",
 				"Slate",
 				"SlateCore",

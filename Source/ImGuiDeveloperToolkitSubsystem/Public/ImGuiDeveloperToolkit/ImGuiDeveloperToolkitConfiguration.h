@@ -6,7 +6,6 @@
 
 #include "ImGuiDeveloperToolkitConfiguration.generated.h"
 
-// ReSharper disable once CppUE4CodingStandardNamingViolationWarning
 struct ImFont;
 
 UENUM()
@@ -22,41 +21,20 @@ enum class EImGuiDeveloperToolkitGlyphRanges : uint8
 ENUM_CLASS_FLAGS(EImGuiDeveloperToolkitGlyphRanges);
 
 USTRUCT()
-struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitFont
+struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitFontConfiguration
 {
 	GENERATED_BODY();
 
 	UPROPERTY(EditAnywhere)
-	FUtf8String Name = "Roboto-Regular";
+	FString Name;
 
-	UPROPERTY(EditAnywhere)
-	int32 Size = 14;
+	UPROPERTY(EditAnywhere, meta = (UIMin = 6, UIMax = 32))
+	int32 Size = -1;
 
-	UPROPERTY(VisibleAnywhere, meta = (Bitmask, BitmaskEnum = "EImGuiDeveloperToolkitGlyphRanges"))
+	UPROPERTY(
+		EditAnywhere,
+		meta = (Bitmask, BitmaskEnum = "/Script/ImGuiDeveloperToolkitSubsystem.EImGuiDeveloperToolkitGlyphRanges"))
 	int32 GlyphRanges = 0;
-
-	ImFont* Font = nullptr;
-};
-
-UCLASS(Config = "ImGuiDevelopersToolkit", PerObjectConfig)
-class UImGuiDeveloperToolkitSettings : public UObject
-{
-	GENERATED_BODY()
-public:
-	static UImGuiDeveloperToolkitSettings* GetDefault();
-
-	static UImGuiDeveloperToolkitSettings* GetUser();
-
-	UPROPERTY(EditAnywhere, Config)
-	TArray<FString> OpenTools;
-
-	UPROPERTY(EditAnywhere, Config)
-	FImGuiDeveloperToolkitFont Font;
-
-private:
-	static TStrongObjectPtr<UImGuiDeveloperToolkitSettings> UserSettings;
-
-	UImGuiDeveloperToolkitSettings() = default;
 };
 
 USTRUCT()
@@ -87,10 +65,11 @@ private:
 	bool bFontControlsEnabled = true;
 
 	UPROPERTY(VisibleAnywhere)
-	FImGuiDeveloperToolkitFont SelectedFont;
+	FImGuiDeveloperToolkitFontConfiguration PreviousFontConfiguration;
 
-	UPROPERTY(VisibleAnywhere)
-	FImGuiDeveloperToolkitFont PreviousFont;
+	ImFont* DefaultFont = nullptr;
+
+	ImFont* SelectedFont = nullptr;
 
 	FDelegateHandle SetSelectedFontDelegateHandle = {};
 

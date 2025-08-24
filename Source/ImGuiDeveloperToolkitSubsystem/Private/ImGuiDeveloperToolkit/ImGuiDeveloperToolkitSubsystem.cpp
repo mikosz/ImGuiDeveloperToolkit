@@ -36,7 +36,6 @@ void UImGuiDeveloperToolkitSubsystem::Initialize(FSubsystemCollectionBase& Colle
 {
 	Super::Initialize(Collection);
 
-	Configuration.Initialize();
 	PopulateTools();
 }
 
