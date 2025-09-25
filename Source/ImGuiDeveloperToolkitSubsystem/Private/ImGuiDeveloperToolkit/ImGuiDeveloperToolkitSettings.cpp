@@ -2,6 +2,26 @@
 
 #include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitSubsystem.h"
 
+const FImGuiDeveloperToolkitFontConfiguration UImGuiDeveloperToolkitDefaultSettings::FallbackFontSettings{
+	"Roboto-Regular", 14, static_cast<int32>(EImGuiDeveloperToolkitGlyphRanges::BasicLatin)};
+
+UImGuiDeveloperToolkitDefaultSettings& UImGuiDeveloperToolkitDefaultSettings::Get()
+{
+	UImGuiDeveloperToolkitDefaultSettings* const Default = GetMutableDefault<UImGuiDeveloperToolkitDefaultSettings>();
+	if (!ensure(IsValid(Default)))
+	{
+		static UImGuiDeveloperToolkitDefaultSettings Fallback;
+		return Fallback;
+	}
+
+	return *Default;
+}
+
+void UImGuiDeveloperToolkitDefaultSettings::ResetFontSettings()
+{
+	FontSettings = FallbackFontSettings;
+}
+
 UImGuiDeveloperToolkitUserSettings& UImGuiDeveloperToolkitUserSettings::Get()
 {
 	if (!IsValid(UserSettings.Get()))
@@ -23,15 +43,16 @@ const FImGuiDeveloperToolkitFontConfiguration& UImGuiDeveloperToolkitUserSetting
 	}
 
 	FImGuiDeveloperToolkitFontConfiguration ReconciledFontSettings;
-	ReconciledFontSettings.Name = (FontSettings.Name.IsEmpty() ? DefaultSettings->Font.Name : FontSettings.Name);
-	ReconciledFontSettings.Size = (FontSettings.Size <= 0 ? DefaultSettings->Font.Size : FontSettings.Size);
+	ReconciledFontSettings.Name =
+		(FontSettings.Name.IsEmpty() ? DefaultSettings->FontSettings.Name : FontSettings.Name);
+	ReconciledFontSettings.Size = (FontSettings.Size <= 0 ? DefaultSettings->FontSettings.Size : FontSettings.Size);
 	ReconciledFontSettings.GlyphRanges =
-		(FontSettings.GlyphRanges == 0 ? DefaultSettings->Font.GlyphRanges : FontSettings.GlyphRanges);
+		(FontSettings.GlyphRanges == 0 ? DefaultSettings->FontSettings.GlyphRanges : FontSettings.GlyphRanges);
 
 	return ReconciledFontSettings;
 }
 
-void UImGuiDeveloperToolkitUserSettings::SetFontSettings(const FImGuiDeveloperToolkitFontConfiguration& InFontSettings)
+void UImGuiDeveloperToolkitUserSettings::SetFontSettings(FImGuiDeveloperToolkitFontConfiguration InFontSettings)
 {
-	FontSettings = InFontSettings;
+	FontSettings = MoveTemp(InFontSettings);
 }

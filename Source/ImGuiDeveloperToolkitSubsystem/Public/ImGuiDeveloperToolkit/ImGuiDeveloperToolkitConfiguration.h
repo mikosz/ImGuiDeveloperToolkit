@@ -9,6 +9,13 @@
 struct ImFont;
 
 UENUM()
+enum class EImGuiDeveloperToolkitSettingsType
+{
+	Default,
+	User,
+};
+
+UENUM()
 enum class EImGuiDeveloperToolkitGlyphRanges : uint8
 {
 	Default = 0 UMETA(Hidden),
@@ -24,6 +31,9 @@ USTRUCT()
 struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitFontConfiguration
 {
 	GENERATED_BODY();
+
+	FImGuiDeveloperToolkitFontConfiguration() = default;
+	FImGuiDeveloperToolkitFontConfiguration(FUtf8String InName, const int32 InSize, int32 InGlyphRanges);
 
 	UPROPERTY(EditAnywhere)
 	FString Name;
@@ -49,7 +59,7 @@ struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitConfiguration
 
 	void Tick(float DeltaTime);
 
-	void SetFont(const FUtf8String& Name, int32 Size, EImGuiDeveloperToolkitGlyphRanges GlyphRanges);
+	void SetFont(const FUtf8String& Name, int32 Size, int32 GlyphRanges);
 
 	ImFont* GetFont() const;
 
@@ -58,6 +68,9 @@ struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitConfiguration
 	bool IsShown(const FAnsiString& ToolName) const;
 
 private:
+	UPROPERTY(Transient, VisibleAnywhere)
+	EImGuiDeveloperToolkitSettingsType SettingsType = EImGuiDeveloperToolkitSettingsType::User;
+
 	UPROPERTY(Transient, VisibleAnywhere)
 	TMap<FUtf8String, FUtf8String> AvailableFontPathsByName;
 

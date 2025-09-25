@@ -16,11 +16,16 @@ class UImGuiDeveloperToolkitDefaultSettings : public UDeveloperSettings
 {
 	GENERATED_BODY()
 public:
+	static const FImGuiDeveloperToolkitFontConfiguration FallbackFontSettings;
+
 	/// Default font configuration for ImGui Developer Toolkit. Modify in the toolkit by selecting the default
 	/// configuration.
 	UPROPERTY(VisibleAnywhere, Config)
-	FImGuiDeveloperToolkitFontConfiguration
-		Font{"Roboto-Regular", 14, static_cast<int32>(EImGuiDeveloperToolkitGlyphRanges::BasicLatin)};
+	FImGuiDeveloperToolkitFontConfiguration FontSettings = FallbackFontSettings;
+
+	static UImGuiDeveloperToolkitDefaultSettings& Get();
+
+	void ResetFontSettings();
 };
 
 UCLASS(Config = "ImGuiDevelopersToolkit", PerObjectConfig)
@@ -35,7 +40,9 @@ public:
 
 	const FImGuiDeveloperToolkitFontConfiguration& GetFontSettings() const;
 
-	void SetFontSettings(const FImGuiDeveloperToolkitFontConfiguration& InFontSettings);
+	FImGuiDeveloperToolkitFontConfiguration& GetUserFontSettings();
+
+	void SetFontSettings(FImGuiDeveloperToolkitFontConfiguration InFontSettings);
 
 private:
 	static TStrongObjectPtr<UImGuiDeveloperToolkitUserSettings> UserSettings;
