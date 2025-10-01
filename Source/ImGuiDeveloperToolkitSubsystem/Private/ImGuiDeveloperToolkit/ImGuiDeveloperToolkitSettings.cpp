@@ -33,7 +33,7 @@ UImGuiDeveloperToolkitUserSettings& UImGuiDeveloperToolkitUserSettings::Get()
 	return *UserSettings;
 }
 
-const FImGuiDeveloperToolkitFontConfiguration& UImGuiDeveloperToolkitUserSettings::GetFontSettings() const
+FImGuiDeveloperToolkitFontConfiguration UImGuiDeveloperToolkitUserSettings::GetFontSettings() const
 {
 	const UImGuiDeveloperToolkitDefaultSettings* const DefaultSettings =
 		GetDefault<UImGuiDeveloperToolkitDefaultSettings>();
@@ -52,7 +52,15 @@ const FImGuiDeveloperToolkitFontConfiguration& UImGuiDeveloperToolkitUserSetting
 	return ReconciledFontSettings;
 }
 
+FImGuiDeveloperToolkitFontConfiguration& UImGuiDeveloperToolkitUserSettings::GetUserFontSettings()
+{
+	static FImGuiDeveloperToolkitFontConfiguration S;
+	return S;
+}
+
 void UImGuiDeveloperToolkitUserSettings::SetFontSettings(FImGuiDeveloperToolkitFontConfiguration InFontSettings)
 {
 	FontSettings = MoveTemp(InFontSettings);
 }
+
+TStrongObjectPtr<UImGuiDeveloperToolkitUserSettings> UImGuiDeveloperToolkitUserSettings::UserSettings;

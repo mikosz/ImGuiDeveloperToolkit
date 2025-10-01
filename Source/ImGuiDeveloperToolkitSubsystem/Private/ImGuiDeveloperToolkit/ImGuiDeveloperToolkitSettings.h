@@ -38,7 +38,7 @@ public:
 	UPROPERTY(Config)
 	TArray<FString> OpenTools;
 
-	const FImGuiDeveloperToolkitFontConfiguration& GetFontSettings() const;
+	FImGuiDeveloperToolkitFontConfiguration GetFontSettings() const;
 
 	FImGuiDeveloperToolkitFontConfiguration& GetUserFontSettings();
 

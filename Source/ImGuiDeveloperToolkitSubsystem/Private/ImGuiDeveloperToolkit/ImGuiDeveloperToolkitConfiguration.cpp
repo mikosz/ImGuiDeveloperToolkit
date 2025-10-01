@@ -520,6 +520,8 @@ TFuture<bool> FImGuiDeveloperToolkitConfiguration::LoadFonts()
 	using namespace ImGuiDeveloperToolkitConfigurationPrivate;
 
 	const TSharedPtr<TPromise<bool>> Promise = MakeShared<TPromise<bool>>();
+	Promise->SetValue(true);
+#if 0
 
 	const TSharedPtr<FImGuiContext> ImGuiContext = FImGuiContext::Get(ImGui::GetCurrentContext());
 	if (!ImGuiContext.IsValid())
@@ -601,5 +603,6 @@ TFuture<bool> FImGuiDeveloperToolkitConfiguration::LoadFonts()
 			SetSelectedFontDelegateHandle.Reset();
 		});
 
+#endif
 	return Promise->GetFuture();
 }
