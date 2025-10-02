@@ -5,8 +5,6 @@
 #include "UObject/PropertyAccessUtil.h"
 #include "imgui.h"
 
-#define LOCTEXT_NAMESPACE "ImGuiDeveloperToolkitWidgetsPropertyInspector"
-
 namespace ImGuiDeveloperToolkit::PropertyInspector
 {
 
@@ -223,6 +221,7 @@ struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 		{
 			if constexpr (!bIsConst)
 			{
+				// #TODO_dontcommit: floating point comparison, use template equal function
 				EmitPropertyChangeNotifications(
 					ChangeNotify, OldValue == Value, [=] { NumericProperty->SetPropertyValue(Ptr, Value); });
 			}
@@ -467,21 +466,30 @@ struct FTryInspect<FObjectProperty, OuterType>
 
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
-		const bool bShowElements = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanFullWidth);
-		ImGui::TableNextColumn();
 
 		using QualifiedPointerType = ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>*;
-
 		QualifiedPointerType Object = ObjectProperty->GetObjectPropertyValue_InContainer(Outer);
+
+		const bool bTreeNodeOpen = ImGui::TreeNodeEx(
+			Label,
+			ImGuiTreeNodeFlags_SpanFullWidth
+				| ((!Setup.bRecurseIntoObjects || Object == nullptr) ? ImGuiTreeNodeFlags_Leaf
+																	 : ImGuiTreeNodeFlags_None));
+		ON_SCOPE_EXIT
+		{
+			if (bTreeNodeOpen)
+			{
+				ImGui::TreePop();
+			}
+		};
+
+		ImGui::TableNextColumn();
+
 		if (!IsValid(Object))
 		{
 			ImGui::Text(
 				"{%s*} nullptr",
 				reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*ObjectProperty->PropertyClass->GetName()).Get()));
-			if (bShowElements)
-			{
-				ImGui::TreePop();
-			}
 			return true;
 		}
 
@@ -490,10 +498,10 @@ struct FTryInspect<FObjectProperty, OuterType>
 		ImGui::Text(
 			R"({%s*} 0x%p "%s")",
 			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Class->GetName()).Get()),
-			Object,
+			reinterpret_cast<std::intptr_t>(Object),
 			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Object->GetName()).Get()));
 
-		if (bShowElements)
+		if (bTreeNodeOpen && Setup.bRecurseIntoObjects)
 		{
 			Inspect(
 				Label,
@@ -502,7 +510,6 @@ struct FTryInspect<FObjectProperty, OuterType>
 				Object,
 				Object,
 				Setup);
-			ImGui::TreePop();
 		}
 
 		return true;
@@ -626,7 +633,7 @@ void Inspect(
 
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
-	ImGui::Text(Label);
+	ImGui::Text("%s", Label);
 	ImGui::TableNextColumn();
 	ImGui::Text(
 		"Unsupported type: %s",
@@ -644,10 +651,7 @@ void Inspect(
 {
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
-	const bool bTreeNodeOpen = ImGui::TreeNodeEx(
-		Label,
-		ImGuiTreeNodeFlags_SpanFullWidth
-			| (Setup.bRecurseIntoStructs ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_Leaf));
+	const bool bTreeNodeOpen = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanFullWidth);
 	ImGui::TableNextColumn();
 
 	ImGui::Text(
@@ -663,27 +667,61 @@ void Inspect(
 		ImGui::TreePop();
 	};
 
-	if (!Setup.bRecurseIntoStructs)
-	{
-		return;
-	}
+	TArray<const UStruct*, TInlineAllocator<16>> StructHierarchy;
 
-	for (const UStruct* CurrentStruct = &Struct; IsValid(CurrentStruct);
+	for (const UStruct* CurrentStruct = &Struct;
+		 IsValid(CurrentStruct) && (Setup.OnlyChildrenOf == nullptr || CurrentStruct->IsChildOf(Setup.OnlyChildrenOf));
 		 CurrentStruct = CurrentStruct->GetSuperStruct())
 	{
-		if (Setup.OnlyChildrenOf != nullptr && !CurrentStruct->IsChildOf(Setup.OnlyChildrenOf))
+		StructHierarchy.Emplace(CurrentStruct);
+	}
+
+	const auto VisitStruct = [&](TFieldIterator<FProperty> FieldIt)
+	{ Inspect(Label, FieldIt, ChangeNotify, Instance, OuterObject, Setup); };
+
+	int32 NumOpen = 0;
+	for (int32 HierarchyIdx = 1; HierarchyIdx < StructHierarchy.Num(); ++HierarchyIdx)
+	{
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+
+		ON_SCOPE_EXIT
+		{
+			ImGui::TableNextColumn();
+		};
+
+		const UStruct* const CurrentStruct = StructHierarchy[HierarchyIdx];
+		if (!ImGui::TreeNodeEx(
+				CurrentStruct,
+				ImGuiTreeNodeFlags_None,
+				"{%s}",
+				reinterpret_cast<const char*>(
+					StringCast<UTF8CHAR>(*CurrentStruct->GetDisplayNameText().ToString()).Get())))
 		{
 			break;
 		}
 
-		Inspect(
-			Label,
-			TFieldIterator<FProperty>{CurrentStruct, GetFieldIterationFlags(Setup)},
-			ChangeNotify,
-			Instance,
-			OuterObject,
-			Setup);
+		++NumOpen;
 	}
+
+	// #TODO_dontcommit: for primary tick group show same props for child type and parent type
+	for (int32 ParentIdx = NumOpen; ParentIdx > 0; --ParentIdx)
+	{
+		const UStruct* const CurrentStruct = StructHierarchy[ParentIdx];
+		if (TFieldIterator<FProperty> FieldIt{CurrentStruct})
+		{
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+
+			VisitStruct(MoveTemp(FieldIt));
+
+			ImGui::TableNextColumn();
+		}
+
+		ImGui::TreePop();
+	}
+
+	VisitStruct(TFieldIterator<FProperty>{StructHierarchy[0]});
 }
 
 template <class T>
@@ -752,5 +790,3 @@ void Inspect(const char* Label, const UClass& Class, const UObject& Instance, co
 }
 
 }  // namespace ImGuiDeveloperToolkit::PropertyInspector
-
-#undef LOCTEXT_NAMESPACE
