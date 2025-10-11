@@ -2,6 +2,7 @@
 
 #include "Containers/AnsiString.h"
 #include "ImGuiDeveloperToolkit/AutoWidget.h"
+#include "ImGuiDeveloperToolkit/Private/ImGuiDeveloperToolkitUtilities.h"
 #include "UObject/PropertyAccessUtil.h"
 #include "imgui.h"
 
@@ -14,6 +15,22 @@ namespace Private
 EFieldIterationFlags GetFieldIterationFlags(const FInspectorSetup& Setup)
 {
 	return Setup.bIncludeDeprecated ? EFieldIterationFlags::IncludeDeprecated : EFieldIterationFlags::None;
+}
+
+void SetStructItemTooltip(const UStruct& Struct)
+{
+	if (const FText Tooltip = Struct.GetToolTipText(); !Tooltip.IsEmpty())
+	{
+		ImGui::SetItemTooltip("%s", IGDT_TEXT_TO_CSTR(Tooltip));
+	}
+}
+
+void SetPropertyItemTooltip(const FProperty& Property)
+{
+	if (const FText Tooltip = Property.GetToolTipText(); !Tooltip.IsEmpty())
+	{
+		ImGui::SetItemTooltip("%s", IGDT_TEXT_TO_CSTR(Tooltip));
+	}
 }
 
 template <class T, class Enable = void>
@@ -70,6 +87,7 @@ template <class T>
 void Inspect(
 	const char* Label,
 	const UStruct& Struct,
+	const bool bRecurseInto,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
 	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
@@ -99,6 +117,7 @@ struct FTryInspect<FStrProperty, OuterType>
 
 		ImGui::TableNextColumn();
 		ImGui::Text("%s", Label);
+		SetPropertyItemTooltip(Property);
 
 		ImGui::TableNextColumn();
 
@@ -148,6 +167,7 @@ struct FTryInspect<FBoolProperty, OuterType>
 
 		ImGui::TableNextColumn();
 		ImGui::Text("%s", Label);
+		SetPropertyItemTooltip(Property);
 
 		ImGui::TableNextColumn();
 
@@ -199,6 +219,7 @@ struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 
 		ImGui::TableNextColumn();
 		ImGui::Text("%s", Label);
+		SetPropertyItemTooltip(Property);
 
 		ImGui::TableNextColumn();
 
@@ -254,6 +275,7 @@ struct FTryInspect<FEnumProperty, OuterType>
 
 		ImGui::TableNextColumn();
 		ImGui::Text("%s", Label);
+		SetPropertyItemTooltip(Property);
 
 		ImGui::TableNextColumn();
 
@@ -335,6 +357,7 @@ struct FTryInspect<FArrayProperty, OuterType>
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
 		const bool bShowElements = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanFullWidth);
+		SetPropertyItemTooltip(Property);
 		ImGui::TableNextColumn();
 		ImGui::Text("[%d]", NumElements);
 
@@ -475,6 +498,8 @@ struct FTryInspect<FObjectProperty, OuterType>
 			ImGuiTreeNodeFlags_SpanFullWidth
 				| ((!Setup.bRecurseIntoObjects || Object == nullptr) ? ImGuiTreeNodeFlags_Leaf
 																	 : ImGuiTreeNodeFlags_None));
+		SetPropertyItemTooltip(Property);
+
 		ON_SCOPE_EXIT
 		{
 			if (bTreeNodeOpen)
@@ -487,9 +512,7 @@ struct FTryInspect<FObjectProperty, OuterType>
 
 		if (!IsValid(Object))
 		{
-			ImGui::Text(
-				"{%s*} nullptr",
-				reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*ObjectProperty->PropertyClass->GetName()).Get()));
+			ImGui::Text("{%s*} nullptr", IGDT_TEXT_TO_CSTR(ObjectProperty->PropertyClass->GetDisplayNameText()));
 			return true;
 		}
 
@@ -497,9 +520,9 @@ struct FTryInspect<FObjectProperty, OuterType>
 
 		ImGui::Text(
 			R"({%s*} 0x%p "%s")",
-			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Class->GetName()).Get()),
-			reinterpret_cast<std::intptr_t>(Object),
-			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Object->GetName()).Get()));
+			IGDT_TEXT_TO_CSTR(Class->GetDisplayNameText()),
+			static_cast<const void*>(Object),
+			IGDT_STRING_TO_CSTR(Object->GetName()));
 
 		if (bTreeNodeOpen && Setup.bRecurseIntoObjects)
 		{
@@ -550,14 +573,9 @@ void Inspect(
 		ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(Property);
 		ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(Property);
 
-		ImGui::PushID(reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Property->GetName()).Get()));
+		ImGui::PushID(Property);
 		Inspect(
-			reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Property->GetDisplayNameText().ToString()).Get()),
-			*Property,
-			ChangeNotify,
-			Instance,
-			OuterObject,
-			Setup);
+			IGDT_TEXT_TO_CSTR(Property->GetDisplayNameText()), *Property, ChangeNotify, Instance, OuterObject, Setup);
 		ImGui::PopID();
 
 		ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(PreviousActiveMemberProperty);
@@ -592,6 +610,7 @@ void Inspect(
 	Inspect(
 		Label,
 		*StructProperty.Struct,
+		Setup.bRecurseIntoStructs,
 		ChangeNotify,
 		StructProperty.ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<T, void>>(Outer),
 		OuterObject,
@@ -635,15 +654,17 @@ void Inspect(
 	ImGui::TableNextColumn();
 	ImGui::Text("%s", Label);
 	ImGui::TableNextColumn();
-	ImGui::Text(
-		"Unsupported type: %s",
-		reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Property.GetClass()->GetName()).Get()));
+	ImGui::Text("Unsupported type: %s", IGDT_TEXT_TO_CSTR(Property.GetClass()->GetDisplayNameText()));
 }
 
+/// Inspect function for types - shows a label next to the type's display name. If bRecurseInto is true, also
+/// shows properties of that type within an expandable tree node. Note this is used for both classes and structs.
 template <class T>
 void Inspect(
 	const char* Label,
+	const char* ToolTip,
 	const UStruct& Struct,
+	const bool bRecurseInto,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
 	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
@@ -651,11 +672,16 @@ void Inspect(
 {
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
-	const bool bTreeNodeOpen = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanFullWidth); // #TODO_dontcommit span all columns
+	const bool bTreeNodeOpen = ImGui::TreeNodeEx(
+		Label, ImGuiTreeNodeFlags_SpanFullWidth | (bRecurseInto ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_Leaf));
+	if (ToolTip != nullptr)
+	{
+		ImGui::SetItemTooltip("%s", ToolTip);
+	}
 	ImGui::TableNextColumn();
 
-	ImGui::Text(
-		"{%s}", reinterpret_cast<const char*>(StringCast<UTF8CHAR>(*Struct.GetDisplayNameText().ToString()).Get()));
+	ImGui::Text("{%s}", IGDT_TEXT_TO_CSTR(Struct.GetDisplayNameText()));
+	SetStructItemTooltip(Struct);
 
 	if (!bTreeNodeOpen)
 	{
@@ -666,6 +692,11 @@ void Inspect(
 	{
 		ImGui::TreePop();
 	};
+
+	if (!bRecurseInto)
+	{
+		return;
+	}
 
 	TArray<const UStruct*, TInlineAllocator<16>> StructHierarchy;
 
@@ -691,12 +722,11 @@ void Inspect(
 		};
 
 		const UStruct* const CurrentStruct = StructHierarchy[HierarchyIdx];
-		if (!ImGui::TreeNodeEx(
-				CurrentStruct,
-				ImGuiTreeNodeFlags_None,
-				"{%s}",
-				reinterpret_cast<const char*>(
-					StringCast<UTF8CHAR>(*CurrentStruct->GetDisplayNameText().ToString()).Get())))
+		const bool bNodeOpen = ImGui::TreeNodeEx(
+			CurrentStruct, ImGuiTreeNodeFlags_None, "{%s}", IGDT_TEXT_TO_CSTR(CurrentStruct->GetDisplayNameText()));
+		SetStructItemTooltip(*CurrentStruct);
+
+		if (!bNodeOpen)
 		{
 			break;
 		}
@@ -744,7 +774,7 @@ void CreateKeyValueTableAndInspect(
 		ImGui::TableSetupColumn("Key");
 		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-		Inspect(Label, Struct, ChangeNotify, Instance, OuterObject, Setup);
+		Inspect(Label, nullptr, Struct, true, ChangeNotify, Instance, OuterObject, Setup);
 
 		ImGui::EndTable();
 	}
@@ -752,6 +782,7 @@ void CreateKeyValueTableAndInspect(
 
 }  // namespace Private
 
+// #TODO_dontcommit replace const char* with FAnsiStringView?
 void Inspect(
 	const char* Label, const UStruct& Struct, void* Instance, UObject* OuterObject, const FInspectorSetup& Setup)
 {
