@@ -36,21 +36,21 @@ struct FInspectorSetup
 };
 
 IMGUIDEVELOPERTOOLKITWIDGETS_API void Inspect(
-	const char* Label, const UStruct& Struct, void* Instance, UObject* OuterObject, const FInspectorSetup& Setup);
+	const char* Label, const UStruct& Struct, void* Instance, UObject* OuterObject, const FInspectorSetup& Setup = {});
 IMGUIDEVELOPERTOOLKITWIDGETS_API void Inspect(
 	const char* Label,
 	const UStruct& Struct,
 	const void* Instance,
 	const UObject* OuterObject,
-	const FInspectorSetup& Setup);
+	const FInspectorSetup& Setup = {});
 IMGUIDEVELOPERTOOLKITWIDGETS_API void Inspect(
-	const char* Label, const UClass& Class, UObject& Instance, const FInspectorSetup& Setup);
+	const char* Label, const UClass& Class, UObject& Instance, const FInspectorSetup& Setup = {});
 IMGUIDEVELOPERTOOLKITWIDGETS_API void Inspect(
-	const char* Label, const UClass& Class, const UObject& Instance, const FInspectorSetup& Setup);
+	const char* Label, const UClass& Class, const UObject& Instance, const FInspectorSetup& Setup = {});
 
 template <class T UE_REQUIRES(Private::TIsUHTUStruct_v<T>)>
 void Inspect(
-	const char* Label, T& Instance, Private::TCopyConstType<T, UObject>* OuterObject, const FInspectorSetup& Setup)
+	const char* Label, T& Instance, Private::TCopyConstType<T, UObject>* OuterObject, const FInspectorSetup& Setup = {})
 {
 	if (const UStruct* Struct = T::StaticStruct(); IsValid(Struct))
 	{
@@ -59,7 +59,7 @@ void Inspect(
 }
 
 template <class T UE_REQUIRES(Private::TIsUHTUClass_v<T>)>
-void Inspect(const char* Label, T& Instance, const FInspectorSetup& Setup)
+void Inspect(const char* Label, T& Instance, const FInspectorSetup& Setup = {})
 {
 	if (const UClass* Class = T::StaticClass(); IsValid(Class))
 	{

@@ -651,7 +651,7 @@ void Inspect(
 {
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
-	const bool bTreeNodeOpen = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanFullWidth);
+	const bool bTreeNodeOpen = ImGui::TreeNodeEx(Label, ImGuiTreeNodeFlags_SpanFullWidth); // #TODO_dontcommit span all columns
 	ImGui::TableNextColumn();
 
 	ImGui::Text(
@@ -704,11 +704,10 @@ void Inspect(
 		++NumOpen;
 	}
 
-	// #TODO_dontcommit: for primary tick group show same props for child type and parent type
 	for (int32 ParentIdx = NumOpen; ParentIdx > 0; --ParentIdx)
 	{
 		const UStruct* const CurrentStruct = StructHierarchy[ParentIdx];
-		if (TFieldIterator<FProperty> FieldIt{CurrentStruct})
+		if (TFieldIterator<FProperty> FieldIt{CurrentStruct, GetFieldIterationFlags(Setup)})
 		{
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
@@ -721,7 +720,7 @@ void Inspect(
 		ImGui::TreePop();
 	}
 
-	VisitStruct(TFieldIterator<FProperty>{StructHierarchy[0]});
+	VisitStruct(TFieldIterator<FProperty>{StructHierarchy[0], GetFieldIterationFlags(Setup)});
 }
 
 template <class T>
