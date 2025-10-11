@@ -4,6 +4,8 @@
 #include "ImGuiDeveloperToolkit/AutoWidget.h"
 #include "ImGuiDeveloperToolkit/Private/ImGuiDeveloperToolkitUtilities.h"
 #include "UObject/PropertyAccessUtil.h"
+#include "Zakazane/Math.h"
+#include "Zakazane/TypeTraits.h"
 #include "imgui.h"
 
 namespace ImGuiDeveloperToolkit::PropertyInspector
@@ -65,7 +67,7 @@ void Inspect(
 	TFieldIterator<FProperty> FieldIterator,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
-	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
+	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup);
 template <class T>
 void Inspect(
@@ -73,7 +75,7 @@ void Inspect(
 	FProperty& Property,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Outer,
-	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
+	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup);
 template <class T>
 void Inspect(
@@ -81,7 +83,7 @@ void Inspect(
 	FStructProperty& StructProperty,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Outer,
-	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
+	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup);
 template <class T>
 void Inspect(
@@ -90,8 +92,49 @@ void Inspect(
 	const bool bRecurseInto,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
-	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
+	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup);
+
+struct FPropertyInspectorBase
+{
+};
+
+struct FStringPropertyInspector : FPropertyInspectorBase
+{
+};
+
+struct FBoolPropertyInspector : FPropertyInspectorBase
+{
+};
+
+template <class T>
+struct TNumericPropertyInspector : FPropertyInspectorBase
+{
+};
+
+struct FEnumPropertyInspector : FPropertyInspectorBase
+{
+};
+
+struct FArrayPropertyInspector : FPropertyInspectorBase
+{
+};
+
+struct FStructPropertyInspector : FPropertyInspectorBase
+{
+};
+
+struct FObjectPropertyInspector : FPropertyInspectorBase
+{
+};
+
+using FPropertyInspector = TVariant<
+	FStringPropertyInspector,
+	FBoolPropertyInspector,
+	FEnumPropertyInspector,
+	FArrayPropertyInspector,
+	FStructPropertyInspector,
+	FObjectPropertyInspector>;
 
 template <class T, class OuterType, class Enable = void>
 struct FTryInspect;
@@ -104,7 +147,7 @@ struct FTryInspect<FStrProperty, OuterType>
 		FProperty& Property,
 		FPropertyAccessChangeNotify& ChangeNotify,
 		OuterType* Outer,
-		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject,
+		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup) const
 	{
 		FStrProperty* const StrProperty = ExactCastField<FStrProperty>(&Property);
@@ -123,9 +166,7 @@ struct FTryInspect<FStrProperty, OuterType>
 
 		constexpr bool bIsConst = TIsConst<OuterType>::Value;
 
-		auto* Ptr =
-			StrProperty->ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, FString>>(
-				Outer);
+		auto* Ptr = StrProperty->ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, FString>>(Outer);
 		const FString& OldValue = StrProperty->GetPropertyValue(Ptr);
 		FString Value = OldValue;
 
@@ -154,7 +195,7 @@ struct FTryInspect<FBoolProperty, OuterType>
 		FProperty& Property,
 		FPropertyAccessChangeNotify& ChangeNotify,
 		OuterType* Outer,
-		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject,
+		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup) const
 	{
 		FBoolProperty* const BoolProperty = ExactCastField<FBoolProperty>(&Property);
@@ -173,9 +214,7 @@ struct FTryInspect<FBoolProperty, OuterType>
 
 		constexpr bool bIsConst = TIsConst<OuterType>::Value;
 
-		auto* Ptr =
-			BoolProperty->ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, bool>>(
-				Outer);
+		auto* Ptr = BoolProperty->ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, bool>>(Outer);
 		const bool OldValue = BoolProperty->GetPropertyValue(Ptr);
 		bool Value = OldValue;
 
@@ -204,7 +243,7 @@ struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 		FProperty& Property,
 		FPropertyAccessChangeNotify& ChangeNotify,
 		OuterType* Outer,
-		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject,
+		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup) const
 	{
 		T* const NumericProperty = ExactCastField<T>(&Property);
@@ -225,10 +264,7 @@ struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 
 		constexpr bool bIsConst = TIsConst<OuterType>::Value;
 
-		auto* Ptr =
-			NumericProperty
-				->template ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, TCppType>>(
-					Outer);
+		auto* Ptr = NumericProperty->template ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, TCppType>>(Outer);
 		TCppType Value = NumericProperty->GetPropertyValue(Ptr);
 		const TCppType OldValue = Value;
 		// #TODO_dontcommit: potentially make custom steps per type? If so then move to auto widget. Of a default there
@@ -242,9 +278,10 @@ struct FTryInspect<T, OuterType, std::enable_if_t<TIsNumericPropertyV<T>>>
 		{
 			if constexpr (!bIsConst)
 			{
-				// #TODO_dontcommit: floating point comparison, use template equal function
 				EmitPropertyChangeNotifications(
-					ChangeNotify, OldValue == Value, [=] { NumericProperty->SetPropertyValue(Ptr, Value); });
+					ChangeNotify,
+					Zkz::Math::IsNearlyEqual(OldValue, Value),
+					[=] { NumericProperty->SetPropertyValue(Ptr, Value); });
 			}
 		}
 		ImGui::PopID();
@@ -262,7 +299,7 @@ struct FTryInspect<FEnumProperty, OuterType>
 		FProperty& Property,
 		FPropertyAccessChangeNotify& ChangeNotify,
 		OuterType* Outer,
-		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject,
+		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup) const
 	{
 		const FEnumProperty* const EnumProperty = ExactCastField<FEnumProperty>(&Property);
@@ -293,12 +330,8 @@ struct FTryInspect<FEnumProperty, OuterType>
 
 		constexpr bool bIsConst = TIsConst<OuterType>::Value;
 
-		// #TODO_dontcommit the need to say ImGuiDeveloperToolkit::Private:: for type traits is irritating
-		auto* Ptr =
-			EnumProperty->ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, void>>(
-				Outer);
-		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, int64> EnumValue =
-			UnderlyingProperty->GetSignedIntPropertyValue(Ptr);
+		auto* Ptr = EnumProperty->ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, void>>(Outer);
+		Zkz::TCopyConstType<OuterType, int64> EnumValue = UnderlyingProperty->GetSignedIntPropertyValue(Ptr);
 		const int64 OldValue = EnumValue;
 
 		// #TODO_dontcommit: tooltips everywhere!
@@ -332,7 +365,7 @@ struct FTryInspect<FArrayProperty, OuterType>
 		FProperty& Property,
 		FPropertyAccessChangeNotify& ChangeNotify,
 		OuterType* Outer,
-		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject,
+		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup) const
 	{
 		FArrayProperty* const ArrayProperty = ExactCastField<FArrayProperty>(&Property);
@@ -341,9 +374,7 @@ struct FTryInspect<FArrayProperty, OuterType>
 			return false;
 		}
 
-		auto* ArrayData =
-			ArrayProperty->ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, void>>(
-				Outer);
+		auto* ArrayData = ArrayProperty->ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, void>>(Outer);
 
 		if (ArrayData == nullptr || ArrayProperty->Inner == nullptr)
 		{
@@ -429,8 +460,7 @@ struct FTryInspect<FArrayProperty, OuterType>
 				ImGui::PopID();
 			};
 
-			ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, void>* RawElementPtr =
-				ArrayHelper.GetRawPtr(Index);
+			Zkz::TCopyConstType<OuterType, void>* RawElementPtr = ArrayHelper.GetRawPtr(Index);
 			Inspect(LabelBuilder.ToString(), *ArrayProperty->Inner, ChangeNotify, RawElementPtr, OuterObject, Setup);
 
 			ImGui::SameLine();
@@ -453,7 +483,7 @@ struct FTryInspect<FStructProperty, OuterType>
 		FProperty& Property,
 		FPropertyAccessChangeNotify& ChangeNotify,
 		OuterType* Outer,
-		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject,
+		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup) const
 	{
 		FStructProperty* const StructProperty = CastField<FStructProperty>(&Property);
@@ -476,7 +506,7 @@ struct FTryInspect<FObjectProperty, OuterType>
 		FProperty& Property,
 		FPropertyAccessChangeNotify& ChangeNotify,
 		OuterType* Outer,
-		ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>* OuterObject,
+		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup) const
 	{
 		// #TODO #PropertyInspector: would be cool to allow modification of at least the address, but potentially
@@ -490,7 +520,7 @@ struct FTryInspect<FObjectProperty, OuterType>
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
 
-		using QualifiedPointerType = ImGuiDeveloperToolkit::Private::TCopyConstType<OuterType, UObject>*;
+		using QualifiedPointerType = Zkz::TCopyConstType<OuterType, UObject>*;
 		QualifiedPointerType Object = ObjectProperty->GetObjectPropertyValue_InContainer(Outer);
 
 		const bool bTreeNodeOpen = ImGui::TreeNodeEx(
@@ -545,7 +575,7 @@ void Inspect(
 	TFieldIterator<FProperty> FieldIterator,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
-	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
+	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup)
 {
 	for (; FieldIterator; ++FieldIterator)
@@ -590,7 +620,7 @@ void Inspect(
 	FStructProperty& StructProperty,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Outer,
-	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
+	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup)
 {
 	if (!IsValid(StructProperty.Struct))
@@ -612,7 +642,7 @@ void Inspect(
 		*StructProperty.Struct,
 		Setup.bRecurseIntoStructs,
 		ChangeNotify,
-		StructProperty.ContainerPtrToValuePtr<ImGuiDeveloperToolkit::Private::TCopyConstType<T, void>>(Outer),
+		StructProperty.ContainerPtrToValuePtr<Zkz::TCopyConstType<T, void>>(Outer),
 		OuterObject,
 		StructPropertySetup);
 }
@@ -625,7 +655,7 @@ void Inspect(
 	FProperty& Property,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Outer,
-	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
+	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup)
 {
 	if (
@@ -667,7 +697,7 @@ void Inspect(
 	const bool bRecurseInto,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
-	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
+	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup)
 {
 	ImGui::TableNextRow();
@@ -759,7 +789,7 @@ void CreateKeyValueTableAndInspect(
 	const UStruct& Struct,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
-	ImGuiDeveloperToolkit::Private::TCopyConstType<T, UObject>* OuterObject,
+	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup)
 {
 	if (Instance == nullptr)

@@ -21,7 +21,8 @@ public class ImGuiDeveloperToolkitWidgets : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				"ImGui"
+				"ImGui",
+				"ZakazaneUtilities"
 			}
 		);
 	}
