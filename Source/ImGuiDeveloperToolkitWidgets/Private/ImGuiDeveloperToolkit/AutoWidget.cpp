@@ -1,7 +1,7 @@
 ﻿#include "ImGuiDeveloperToolkit/AutoWidget.h"
 
 #include "ImGuiDeveloperToolkit/Private/EnumValueRange.h"
-#include "ImGuiDeveloperToolkit/Private/TypeTraits.h"
+#include "Zakazane/TypeTraits.h"
 
 #include <type_traits>
 
@@ -73,7 +73,7 @@ bool AutoWidget(const char* Label, const UEnum& Enum, T& EnumValue, EEnumValueTy
 															  : LOCTEXT("DefaultEnumPreviewValue", "Select value");
 		return FUtf8String{Result.ToString()};
 	}();
-	constexpr bool bIsConst = TValueTypeIsConst_v<T>;
+	constexpr bool bIsConst = Zkz::TValueTypeIsConst_v<T>;
 
 	ImGui::BeginDisabled(bIsConst);
 

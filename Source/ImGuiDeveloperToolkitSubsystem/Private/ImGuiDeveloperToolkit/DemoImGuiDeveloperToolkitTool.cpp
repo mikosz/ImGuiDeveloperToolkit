@@ -1,6 +1,7 @@
 ﻿#include "DemoImGuiDeveloperToolkitTool.h"
 
 #include "ImGuiDeveloperToolkit/PropertyInspector.h"
+#include "Zakazane/ReturnIfMacros.h"
 #include "imgui.h"
 #include "implot.h"
 
@@ -23,10 +24,8 @@ void UDemoImGuiDeveloperToolkitTool::Tick(
 
 void UDemoImGuiDeveloperToolkitTool::TickDemoSelectionWindow(bool& bInOutShow)
 {
-	if (!bInOutShow)
-	{
-		return;
-	}
+	// #TODO_dontcommit closing tool windows broken after config update
+	ZKZ_RETURN_IF(!bInOutShow);
 
 	ON_SCOPE_EXIT
 	{

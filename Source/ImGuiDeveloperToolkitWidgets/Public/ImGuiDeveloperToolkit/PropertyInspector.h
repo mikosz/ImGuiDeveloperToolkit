@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 
-#include "Private/TypeTraits.h"
+#include "Zakazane/TypeTraits.h"
 
 namespace ImGuiDeveloperToolkit::PropertyInspector
 {
@@ -48,9 +48,9 @@ IMGUIDEVELOPERTOOLKITWIDGETS_API void Inspect(
 IMGUIDEVELOPERTOOLKITWIDGETS_API void Inspect(
 	const char* Label, const UClass& Class, const UObject& Instance, const FInspectorSetup& Setup = {});
 
-template <class T UE_REQUIRES(Private::TIsUHTUStruct_v<T>)>
+template <class T UE_REQUIRES(Zkz::TIsUHTUStruct_v<T>)>
 void Inspect(
-	const char* Label, T& Instance, Private::TCopyConstType<T, UObject>* OuterObject, const FInspectorSetup& Setup = {})
+	const char* Label, T& Instance, Zkz::TCopyConstType<T, UObject>* OuterObject, const FInspectorSetup& Setup = {})
 {
 	if (const UStruct* Struct = T::StaticStruct(); IsValid(Struct))
 	{
@@ -58,7 +58,7 @@ void Inspect(
 	}
 }
 
-template <class T UE_REQUIRES(Private::TIsUHTUClass_v<T>)>
+template <class T UE_REQUIRES(Zkz::TIsUHTUClass_v<T>)>
 void Inspect(const char* Label, T& Instance, const FInspectorSetup& Setup = {})
 {
 	if (const UClass* Class = T::StaticClass(); IsValid(Class))

@@ -9,7 +9,8 @@ public class ImGuiDeveloperToolkitWidgets : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new[]
 			{
-				"Core"
+				"Core",
+				"ZakazaneUtilities"
 			}
 		);
 
@@ -22,7 +23,7 @@ public class ImGuiDeveloperToolkitWidgets : ModuleRules
 				"Slate",
 				"SlateCore",
 				"ImGui",
-				"ZakazaneUtilities"
+				"ZakazaneUtilitiesEditor"
 			}
 		);
 	}
