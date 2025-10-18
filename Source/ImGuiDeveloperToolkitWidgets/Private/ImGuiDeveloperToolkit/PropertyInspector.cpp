@@ -76,7 +76,7 @@ void SetPropertyItemTooltip(const FProperty& Property)
 	}
 }
 
-static void ShowCompoundTypeRightColumn(const UStruct& Struct)
+void ShowCompoundTypeRightColumn(const UStruct& Struct)
 {
 	ImGui::Text("{%s}", IGDT_TEXT_TO_CSTR(Struct.GetDisplayNameText()));
 	SetStructItemTooltip(Struct);
@@ -230,7 +230,7 @@ struct FStringPropertyInspector : FPropertyInspector_Leaf
 		constexpr bool bIsConst = TIsConst<OuterType>::Value;
 
 		auto* Ptr = Property.ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, FString>>(Outer);
-		const FString& OldValue = Property.GetPropertyValue(Ptr);
+		const FString& OldValue = FPropertyType::GetPropertyValue(Ptr);
 		FString Value = OldValue;
 
 		ImGui::BeginDisabled(bIsConst);
@@ -240,7 +240,7 @@ struct FStringPropertyInspector : FPropertyInspector_Leaf
 			if constexpr (!bIsConst)
 			{
 				Zkz::EmitPropertyChangeNotifications(
-					ChangeNotify, OldValue == Value, [&] { Property.SetPropertyValue(Ptr, Value); });
+					ChangeNotify, OldValue == Value, [&] { FPropertyType::SetPropertyValue(Ptr, Value); });
 			}
 		}
 		ImGui::PopID();
@@ -452,7 +452,9 @@ struct FStructPropertyInspector : FPropertyInspector_Node
 		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup)
 	{
-		ShowCompoundTypeChildren(*Property.Struct, ChangeNotify, Outer, OuterObject, Setup);
+		auto* const StructInstance = Property.ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, void>>(Outer);
+
+		ShowCompoundTypeChildren(*Property.Struct, ChangeNotify, StructInstance, OuterObject, Setup);
 	}
 };
 
@@ -506,7 +508,10 @@ struct FObjectPropertyInspector : FPropertyInspector_Node
 		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup)
 	{
-		ShowCompoundTypeChildren(*Property.PropertyClass, ChangeNotify, Outer, OuterObject, Setup);
+		using QualifiedPointerType = Zkz::TCopyConstType<OuterType, UObject>*;
+		const QualifiedPointerType Object = Property.GetObjectPropertyValue_InContainer(Outer);
+
+		ShowCompoundTypeChildren(*Property.PropertyClass, ChangeNotify, Object, Object, Setup);
 	}
 };
 
@@ -567,9 +572,8 @@ void InspectProperty(
 			if (bNodeExpanded)
 			{
 				VariantType::ShowChildren(*VariantProperty, ChangeNotify, Outer, OuterObject, Setup);
+				ImGui::TreePop();
 			}
-
-			ImGui::TreePop();
 		});
 }
 
