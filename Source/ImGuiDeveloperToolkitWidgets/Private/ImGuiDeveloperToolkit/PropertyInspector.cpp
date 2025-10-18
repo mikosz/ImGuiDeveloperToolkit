@@ -44,22 +44,41 @@ void Inspect(
 	const char* Label,
 	const char* ToolTip,
 	const UStruct& Struct,
-	const bool bRecurseInto,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
 	Zkz::TCopyConstType<T, UObject>* OuterObject,
-	const FInspectorSetup& Setup);
+	const FInspectorSetup& Setup,
+	const FInspectorSetup::FTypeSetup& TypeSetup);
 template <class T>
-void InspectFields(
-	TFieldIterator<FProperty> FieldIterator,
+void InspectField(
+	FProperty& Property,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
 	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup);
 
-EFieldIterationFlags GetFieldIterationFlags(const FInspectorSetup& Setup)
+EFieldIterationFlags GetFieldIterationFlags(const FInspectorSetup& Setup, const FInspectorSetup::FTypeSetup& TypeSetup)
 {
-	return Setup.bIncludeDeprecated ? EFieldIterationFlags::IncludeDeprecated : EFieldIterationFlags::None;
+	EFieldIterationFlags Flags = EFieldIterationFlags::None;
+
+	if (Setup.bIncludeDeprecated)
+	{
+		Flags |= EFieldIterationFlags::IncludeDeprecated;
+	}
+
+	if (!TypeSetup.bShowHierarchy)
+	{
+		Flags |= EFieldIterationFlags::IncludeSuper;
+	}
+
+	return Flags;
+}
+
+FInspectorSetup::FTypeSetup GetTypeSetupForBase(const FInspectorSetup::FTypeSetup& ChildTypeSetup)
+{
+	FInspectorSetup::FTypeSetup Result = ChildTypeSetup;
+	Result.bRecurseInto = true;
+	return Result;
 }
 
 void SetStructItemTooltip(const UStruct& Struct)
@@ -90,61 +109,123 @@ void ShowCompoundTypeChildren(
 	FPropertyAccessChangeNotify& ChangeNotify,
 	OuterType* Outer,
 	Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
-	const FInspectorSetup& Setup)
+	const FInspectorSetup& Setup,
+	const FInspectorSetup::FTypeSetup& TypeSetup)
 {
-	TArray<const UStruct*, TInlineAllocator<16>> StructHierarchy;
-
-	for (const UStruct* CurrentStruct = &Struct;
-		 IsValid(CurrentStruct) && (Setup.OnlyChildrenOf == nullptr || CurrentStruct->IsChildOf(Setup.OnlyChildrenOf));
-		 CurrentStruct = CurrentStruct->GetSuperStruct())
+	const auto InspectFields = [&](TFieldIterator<FProperty> FieldIt)
 	{
-		StructHierarchy.Emplace(CurrentStruct);
-	}
+		constexpr int32 NumInlineProperties = 64;
+		constexpr int32 NumInlineCategories = 16;
+		using FProperties = TArray<FProperty*, TInlineAllocator<NumInlineProperties>>;
+		using FPropertiesByCategory = TMap<FString, FProperties, TInlineSetAllocator<NumInlineCategories>>;
 
-	const auto VisitStruct = [&](TFieldIterator<FProperty> FieldIt)
-	{ InspectFields(FieldIt, ChangeNotify, Outer, OuterObject, Setup); };
+		FPropertiesByCategory PropertiesByCategory;
 
-	int32 NumOpen = 0;
-	for (int32 HierarchyIdx = 1; HierarchyIdx < StructHierarchy.Num(); ++HierarchyIdx)
-	{
-		ImGui::TableNextRow();
-		ImGui::TableNextColumn();
-
-		ON_SCOPE_EXIT
+		for (; FieldIt; ++FieldIt)
 		{
-			ImGui::TableNextColumn();
-		};
+			FProperty* const Property = *FieldIt;
 
-		const UStruct* const CurrentStruct = StructHierarchy[HierarchyIdx];
-		const bool bNodeOpen = ImGui::TreeNodeEx(
-			CurrentStruct, DefaultTreeNodeFlags, "{%s}", IGDT_TEXT_TO_CSTR(CurrentStruct->GetDisplayNameText()));
-		SetStructItemTooltip(*CurrentStruct);
+			ZKZ_CONTINUE_IF(Property == nullptr);
+			ZKZ_CONTINUE_IF(
+				Setup.OnlyPropertiesMarked != nullptr && !Property->HasMetaData(Setup.OnlyPropertiesMarked));
 
-		if (!bNodeOpen)
-		{
-			break;
+			static FString EmptyCategory;
+			const FString& Category = TypeSetup.bShowCategories ? Property->GetMetaData("Category") : EmptyCategory;
+
+			PropertiesByCategory.FindOrAdd(Category).Emplace(Property);
+
+			ensure(PropertiesByCategory.Num() <= NumInlineCategories);			  // #TODO_dontcommit
+			ensure(PropertiesByCategory[Category].Num() <= NumInlineProperties);  // #TODO_dontcommit
 		}
 
-		++NumOpen;
-	}
+		for (const auto& [Category, Properties] : PropertiesByCategory)
+		{
+			bool bCategoryNodeVisible = false;
 
-	for (int32 ParentIdx = NumOpen; ParentIdx > 0; --ParentIdx)
+			if (TypeSetup.bShowCategories)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				bCategoryNodeVisible = ImGui::TreeNodeEx(&Category, 0, "[%s]", IGDT_STRING_TO_CSTR(Category));
+				ImGui::TableNextColumn();
+			}
+
+			if (!TypeSetup.bShowCategories || bCategoryNodeVisible)
+			{
+				for (FProperty* const Property : Properties)
+				{
+					InspectField(*Property, ChangeNotify, Outer, OuterObject, Setup);
+				}
+			}
+
+			if (bCategoryNodeVisible)
+			{
+				ImGui::TreePop();
+			}
+		}
+	};
+
+	constexpr int32 NumInlineTypes = 8;
+	TArray<const UStruct*, TInlineAllocator<NumInlineTypes>> StructHierarchy;
+
+	if (TypeSetup.bShowHierarchy)
 	{
-		const UStruct* const CurrentStruct = StructHierarchy[ParentIdx];
-		if (TFieldIterator<FProperty> FieldIt{CurrentStruct, GetFieldIterationFlags(Setup)})
+		for (const UStruct* CurrentStruct = &Struct;
+			 IsValid(CurrentStruct)
+			 && (Setup.OnlyChildrenOf == nullptr || CurrentStruct->IsChildOf(Setup.OnlyChildrenOf));
+			 CurrentStruct = CurrentStruct->GetSuperStruct())
+		{
+			StructHierarchy.Emplace(CurrentStruct);
+		}
+
+		int32 NumOpen = 0;
+		for (int32 HierarchyIdx = 1; HierarchyIdx < StructHierarchy.Num(); ++HierarchyIdx)
 		{
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
 
-			VisitStruct(MoveTemp(FieldIt));
+			ON_SCOPE_EXIT
+			{
+				ImGui::TableNextColumn();
+			};
 
-			ImGui::TableNextColumn();
+			const UStruct* const CurrentStruct = StructHierarchy[HierarchyIdx];
+			const bool bNodeOpen = ImGui::TreeNodeEx(
+				CurrentStruct, DefaultTreeNodeFlags, "{%s}", IGDT_TEXT_TO_CSTR(CurrentStruct->GetDisplayNameText()));
+			SetStructItemTooltip(*CurrentStruct);
+
+			if (!bNodeOpen)
+			{
+				break;
+			}
+
+			++NumOpen;
 		}
 
-		ImGui::TreePop();
+		for (int32 ParentIdx = NumOpen; ParentIdx > 0; --ParentIdx)
+		{
+			const UStruct* const CurrentStruct = StructHierarchy[ParentIdx];
+			if (TFieldIterator<FProperty> FieldIt{CurrentStruct, GetFieldIterationFlags(Setup, TypeSetup)})
+			{
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+
+				InspectFields(MoveTemp(FieldIt));
+
+				ImGui::TableNextColumn();
+			}
+
+			ImGui::TreePop();
+		}
+	}
+	else
+	{
+		StructHierarchy.Emplace(&Struct);
 	}
 
-	VisitStruct(TFieldIterator<FProperty>{StructHierarchy[0], GetFieldIterationFlags(Setup)});
+	ZKZ_RETURN_IF(StructHierarchy.IsEmpty());
+
+	InspectFields(TFieldIterator<FProperty>{StructHierarchy[0], GetFieldIterationFlags(Setup, TypeSetup)});
 }
 
 struct FPropertyInspector_Leaf
@@ -462,7 +543,8 @@ struct FStructPropertyInspector : FPropertyInspector_Node
 	{
 		auto* const StructInstance = Property.ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, void>>(Outer);
 
-		ShowCompoundTypeChildren(*Property.Struct, ChangeNotify, StructInstance, OuterObject, Setup);
+		ShowCompoundTypeChildren(
+			*Property.Struct, ChangeNotify, StructInstance, OuterObject, Setup, Setup.ChildStructureSetup);
 	}
 };
 
@@ -519,7 +601,7 @@ struct FObjectPropertyInspector : FPropertyInspector_Node
 		using QualifiedPointerType = Zkz::TCopyConstType<OuterType, UObject>*;
 		const QualifiedPointerType Object = Property.GetObjectPropertyValue_InContainer(Outer);
 
-		ShowCompoundTypeChildren(*Property.PropertyClass, ChangeNotify, Object, Object, Setup);
+		ShowCompoundTypeChildren(*Property.PropertyClass, ChangeNotify, Object, Object, Setup, Setup.ChildObjectSetup);
 	}
 };
 
@@ -606,40 +688,31 @@ void InspectProperty(
 }
 
 template <class T>
-void InspectFields(
-	TFieldIterator<FProperty> FieldIterator,
+void InspectField(
+	FProperty& Property,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
 	Zkz::TCopyConstType<T, UObject>* OuterObject,
 	const FInspectorSetup& Setup)
 {
-	for (; FieldIterator; ++FieldIterator)
-	{
-		FProperty* const Property = *FieldIterator;
+	auto* const PreviousActiveNode = ChangeNotify.ChangedPropertyChain.GetActiveNode();
+	FProperty* const PreviousActiveProperty = PreviousActiveNode ? PreviousActiveNode->GetValue() : nullptr;
 
-		ZKZ_CONTINUE_IF(Property == nullptr);
-		ZKZ_CONTINUE_IF(Setup.OnlyPropertiesMarked != nullptr && !Property->HasMetaData(Setup.OnlyPropertiesMarked));
+	auto* const PreviousActiveMemberNode = ChangeNotify.ChangedPropertyChain.GetActiveMemberNode();
+	FProperty* const PreviousActiveMemberProperty =
+		PreviousActiveMemberNode ? PreviousActiveMemberNode->GetValue() : nullptr;
 
-		auto* const PreviousActiveNode = ChangeNotify.ChangedPropertyChain.GetActiveNode();
-		FProperty* const PreviousActiveProperty = PreviousActiveNode ? PreviousActiveNode->GetValue() : nullptr;
+	ChangeNotify.ChangedPropertyChain.AddHead(&Property);
+	ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(&Property);
+	ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(&Property);
 
-		auto* const PreviousActiveMemberNode = ChangeNotify.ChangedPropertyChain.GetActiveMemberNode();
-		FProperty* const PreviousActiveMemberProperty =
-			PreviousActiveMemberNode ? PreviousActiveMemberNode->GetValue() : nullptr;
+	ImGui::PushID(&Property);
+	Inspect(IGDT_TEXT_TO_CSTR(Property.GetDisplayNameText()), Property, ChangeNotify, Instance, OuterObject, Setup);
+	ImGui::PopID();
 
-		ChangeNotify.ChangedPropertyChain.AddHead(Property);
-		ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(Property);
-		ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(Property);
-
-		ImGui::PushID(Property);
-		Inspect(
-			IGDT_TEXT_TO_CSTR(Property->GetDisplayNameText()), *Property, ChangeNotify, Instance, OuterObject, Setup);
-		ImGui::PopID();
-
-		ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(PreviousActiveMemberProperty);
-		ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(PreviousActiveProperty);
-		ChangeNotify.ChangedPropertyChain.RemoveNode(Property);
-	}
+	ChangeNotify.ChangedPropertyChain.SetActiveMemberPropertyNode(PreviousActiveMemberProperty);
+	ChangeNotify.ChangedPropertyChain.SetActivePropertyNode(PreviousActiveProperty);
+	ChangeNotify.ChangedPropertyChain.RemoveNode(&Property);
 }
 
 // #TODO_dontcommit: should expose this as well, probably. This is templated only for the constness, so
@@ -664,17 +737,17 @@ void Inspect(
 	const char* Label,
 	const char* ToolTip,
 	const UStruct& Struct,
-	const bool bRecurseInto,
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
 	Zkz::TCopyConstType<T, UObject>* OuterObject,
-	const FInspectorSetup& Setup)
+	const FInspectorSetup& Setup,
+	const FInspectorSetup::FTypeSetup& TypeSetup)
 {
 	ImGui::TableNextRow();
 	ImGui::TableNextColumn();
 
 	const bool bTreeNodeOpen = ImGui::TreeNodeEx(
-		Label, DefaultTreeNodeFlags | (bRecurseInto ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_Leaf));
+		Label, DefaultTreeNodeFlags | (TypeSetup.bRecurseInto ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_Leaf));
 	if (ToolTip != nullptr)
 	{
 		ImGui::SetItemTooltip("%s", ToolTip);
@@ -691,9 +764,9 @@ void Inspect(
 		ImGui::TreePop();
 	};
 
-	ZKZ_RETURN_IF(!bRecurseInto);
+	ZKZ_RETURN_IF(!TypeSetup.bRecurseInto);
 
-	ShowCompoundTypeChildren(Struct, ChangeNotify, Instance, OuterObject, Setup);
+	ShowCompoundTypeChildren(Struct, ChangeNotify, Instance, OuterObject, Setup, TypeSetup);
 }
 
 template <class T>
@@ -703,7 +776,8 @@ void CreateKeyValueTableAndInspect(
 	FPropertyAccessChangeNotify& ChangeNotify,
 	T* Instance,
 	Zkz::TCopyConstType<T, UObject>* OuterObject,
-	const FInspectorSetup& Setup)
+	const FInspectorSetup& Setup,
+	const FInspectorSetup::FTypeSetup& TypeSetup)
 {
 	ZKZ_RETURN_IF(Instance == nullptr);
 
@@ -714,7 +788,7 @@ void CreateKeyValueTableAndInspect(
 		ImGui::TableSetupColumn("Key");
 		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-		Inspect(Label, nullptr, Struct, true, ChangeNotify, Instance, OuterObject, Setup);
+		Inspect(Label, nullptr, Struct, ChangeNotify, Instance, OuterObject, Setup, TypeSetup);
 
 		ImGui::EndTable();
 	}
@@ -728,7 +802,14 @@ void Inspect(
 	FPropertyAccessChangeNotify ChangeNotify;
 	ChangeNotify.ChangedObject = OuterObject;
 
-	Private::CreateKeyValueTableAndInspect(Label, Struct, ChangeNotify, Instance, OuterObject, Setup);
+	Private::CreateKeyValueTableAndInspect(
+		Label,
+		Struct,
+		ChangeNotify,
+		Instance,
+		OuterObject,
+		Setup,
+		Private::GetTypeSetupForBase(Setup.ChildStructureSetup));
 }
 
 void Inspect(
@@ -740,7 +821,14 @@ void Inspect(
 {
 	FPropertyAccessChangeNotify ChangeNotify;
 
-	Private::CreateKeyValueTableAndInspect(Label, Struct, ChangeNotify, Instance, OuterObject, Setup);
+	Private::CreateKeyValueTableAndInspect(
+		Label,
+		Struct,
+		ChangeNotify,
+		Instance,
+		OuterObject,
+		Setup,
+		Private::GetTypeSetupForBase(Setup.ChildStructureSetup));
 }
 
 void Inspect(const char* Label, const UClass& Class, UObject& Instance, const FInspectorSetup& Setup)
@@ -748,14 +836,16 @@ void Inspect(const char* Label, const UClass& Class, UObject& Instance, const FI
 	FPropertyAccessChangeNotify ChangeNotify;
 	ChangeNotify.ChangedObject = &Instance;
 
-	Private::CreateKeyValueTableAndInspect(Label, Class, ChangeNotify, &Instance, &Instance, Setup);
+	Private::CreateKeyValueTableAndInspect(
+		Label, Class, ChangeNotify, &Instance, &Instance, Setup, Private::GetTypeSetupForBase(Setup.ChildObjectSetup));
 }
 
 void Inspect(const char* Label, const UClass& Class, const UObject& Instance, const FInspectorSetup& Setup)
 {
 	FPropertyAccessChangeNotify ChangeNotify;
 
-	Private::CreateKeyValueTableAndInspect(Label, Class, ChangeNotify, &Instance, &Instance, Setup);
+	Private::CreateKeyValueTableAndInspect(
+		Label, Class, ChangeNotify, &Instance, &Instance, Setup, Private::GetTypeSetupForBase(Setup.ChildObjectSetup));
 }
 
 }  // namespace ImGuiDeveloperToolkit::PropertyInspector

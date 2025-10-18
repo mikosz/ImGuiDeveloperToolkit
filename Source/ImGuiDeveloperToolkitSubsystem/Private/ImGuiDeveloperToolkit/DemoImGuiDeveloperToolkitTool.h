@@ -16,7 +16,7 @@ struct FImGuiDemoDeveloperToolkitTool_GrandparentStruct
 	GENERATED_BODY()
 
 	/// String property tooltip - docstring
-	UPROPERTY(DisplayName = "Grandparent property (string)")
+	UPROPERTY(Category = "Cat A", EditAnywhere, DisplayName = "Grandparent property (string)")
 	FString GrandparentPropertyString = TEXT("Grandparent property");
 };
 
@@ -25,7 +25,7 @@ struct FImGuiDemoDeveloperToolkitTool_ParentStruct : public FImGuiDemoDeveloperT
 {
 	GENERATED_BODY()
 
-	UPROPERTY(DisplayName = "Parent property (bool)", meta = (ToolTip = "Bool property tooltip - meta"))
+	UPROPERTY(Category = "Cat B", EditAnywhere, DisplayName = "Parent property (bool)", meta = (ToolTip = "Bool property tooltip - meta"))
 	bool bParentProperty = false;
 };
 
@@ -34,7 +34,7 @@ struct FImGuiDemoDeveloperToolkitTool_ChildStruct : public FImGuiDemoDeveloperTo
 {
 	GENERATED_BODY()
 
-	UPROPERTY(DisplayName = "Child property (int32)")
+	UPROPERTY(Category = "Cat A", EditAnywhere, DisplayName = "Child property (int32)")
 	int32 ParentProperty = 42;
 };
 
@@ -45,10 +45,10 @@ class UImGuiDemoDeveloperToolkitTool_ParentClass : public UObject
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(DisplayName = "Parent class property (ChildStruct)")
+	UPROPERTY(Category = "Cat A", EditAnywhere, DisplayName = "Parent class property (ChildStruct)")
 	FImGuiDemoDeveloperToolkitTool_ChildStruct ChildStructPropertyInParent;
 
-	UPROPERTY(DisplayName = "Parent class property (Text)")
+	UPROPERTY(Category = "Cat B", EditAnywhere, DisplayName = "Parent class property (Text)")
 	FText TextPropertyInParent = FText::FromString("Text property");
 };
 
@@ -58,10 +58,10 @@ class UImGuiDemoDeveloperToolkitTool_ChildClass : public UImGuiDemoDeveloperTool
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(DisplayName = "Child class property (ChildStruct)")
+	UPROPERTY(Category = "Cat A", EditAnywhere, DisplayName = "Child class property (ChildStruct)")
 	FImGuiDemoDeveloperToolkitTool_ChildStruct ChildStructPropertyInChild;
 
-	UPROPERTY(DisplayName = "Child class property (int32)")
+	UPROPERTY(Category = "Cat B", EditAnywhere, DisplayName = "Child class property (int32)")
 	int32 Int32PropertyInChild = 12;
 
 	UPROPERTY(DisplayName = "Child class deprecated property (int32)", meta = (DeprecatedProperty))
