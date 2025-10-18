@@ -87,6 +87,8 @@ void UDemoImGuiDeveloperToolkitTool::EnsureHasDemoData()
 
 void UDemoImGuiDeveloperToolkitTool::ShowDemoWindow(bool* Open)
 {
+	using namespace ImGuiDeveloperToolkit::PropertyInspector;
+
 	ON_SCOPE_EXIT
 	{
 		ImGui::End();
@@ -101,13 +103,26 @@ void UDemoImGuiDeveloperToolkitTool::ShowDemoWindow(bool* Open)
 
 	if (ImGui::CollapsingHeader("Property inspector"))
 	{
-		ImGui::Checkbox("Include deprecated", &DemoData->PropertyInspectorSetup.bIncludeDeprecated);
-		ImGui::Checkbox("Recurse into structs", &DemoData->PropertyInspectorSetup.bRecurseIntoStructs);
-		ImGui::Checkbox("Recurse into objects", &DemoData->PropertyInspectorSetup.bRecurseIntoObjects);
+		const auto ShowTypeSetup = [](const char* const Label, FInspectorSetup::FTypeSetup& Setup)
+		{
+			ImGui::PushID(&Setup);
+			if (ImGui::TreeNodeEx(Label))
+			{
+				ImGui::Checkbox("Recurse into", &Setup.bRecurseInto);
+				ImGui::Checkbox("Show categories", &Setup.bShowCategories);
+				ImGui::Checkbox("Show hierarchy", &Setup.bShowHierarchy);
+				ImGui::TreePop();
+			}
+			ImGui::PopID();
+		};
 
-		ImGuiDeveloperToolkit::PropertyInspector::Inspect(
-			"ChildStruct", DemoData->ChildStruct, this, DemoData->PropertyInspectorSetup);
-		ImGuiDeveloperToolkit::PropertyInspector::Inspect(
-			"ChildClass", *DemoData->ChildClass, DemoData->PropertyInspectorSetup);
+		ImGui::Checkbox("Include deprecated", &DemoData->PropertyInspectorSetup.bIncludeDeprecated);
+		ShowTypeSetup("Child struct setup", DemoData->PropertyInspectorSetup.ChildStructureSetup);
+		ShowTypeSetup("Child object setup", DemoData->PropertyInspectorSetup.ChildObjectSetup);
+
+		ImGui::Separator();
+
+		Inspect("ChildStruct", DemoData->ChildStruct, this, DemoData->PropertyInspectorSetup);
+		Inspect("ChildClass", *DemoData->ChildClass, DemoData->PropertyInspectorSetup);
 	}
 }

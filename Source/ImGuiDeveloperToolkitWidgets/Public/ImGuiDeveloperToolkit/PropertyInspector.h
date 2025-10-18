@@ -11,16 +11,28 @@ namespace ImGuiDeveloperToolkit::PropertyInspector
 
 struct FInspectorSetup
 {
+	struct FTypeSetup
+	{
+		/// Whether to show the contents of child types
+		bool bRecurseInto = false;
+		
+		/// Whether to group inherited properties by superclass 
+		bool bShowHierarchy = false;
+		
+		/// Whether to show property categories
+		bool bShowCategories = false;
+	};
+	
 	/// When inspecting UStructs or UClasses will only show properties of this type or a child type. E.g. for UObject
 	/// if you inspect a UPrimitiveComponent and set this to UActorComponent, will show properties of UPrimitiveComponent,
 	/// USceneComponent, and UActorComponent.
 	UStruct* OnlyChildrenOf = nullptr;
 
-	/// Whether to also show properties of struct properties.
-	bool bRecurseIntoStructs = true;
+	/// Setup for displaying properties of child structures
+	FTypeSetup ChildStructureSetup = {.bRecurseInto = true, .bShowHierarchy = false, .bShowCategories = true};
 
-	/// Whether to also show properties of pointed-to UObjects.
-	bool bRecurseIntoObjects = false;
+	/// Setup for displaying properties of pointed-to objects
+	FTypeSetup ChildObjectSetup = {.bRecurseInto = false, .bShowHierarchy = true, .bShowCategories = false};
 
 	/// If set, will only show properties marked with the given meta tag
 	const TCHAR* OnlyPropertiesMarked = nullptr;

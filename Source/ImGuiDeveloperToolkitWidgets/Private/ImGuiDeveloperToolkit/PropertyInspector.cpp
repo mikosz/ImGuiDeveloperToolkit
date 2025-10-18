@@ -449,7 +449,7 @@ struct FStructPropertyInspector : FPropertyInspector_Node
 	template <class OuterType>
 	static bool HasChildren(const FPropertyType& Property, const OuterType* const Outer, const FInspectorSetup& Setup)
 	{
-		return Setup.bRecurseIntoStructs;
+		return Setup.ChildStructureSetup.bRecurseInto;
 	}
 
 	template <class OuterType>
@@ -476,7 +476,7 @@ struct FObjectPropertyInspector : FPropertyInspector_Node
 		using QualifiedPointerType = Zkz::TCopyConstType<OuterType, UObject>*;
 		const QualifiedPointerType Object = Property.GetObjectPropertyValue_InContainer(Outer);
 
-		return Setup.bRecurseIntoObjects && Object != nullptr;
+		return Setup.ChildObjectSetup.bRecurseInto && Object != nullptr;
 	}
 
 	template <class OuterType>
@@ -576,14 +576,16 @@ void InspectProperty(
 			ImGui::TableNextColumn();
 			VariantType::ShowRightColumn(*VariantProperty, ChangeNotify, Outer, OuterObject, Setup);
 
+			ZKZ_RETURN_IF(!bNodeVisible);
+
+			ON_SCOPE_EXIT
+			{
+				ImGui::TreePop();
+			};
+
 			if (bHasChildren)
 			{
 				VariantType::ShowChildren(*VariantProperty, ChangeNotify, Outer, OuterObject, Setup);
-			}
-
-			if (bNodeVisible)
-			{
-				ImGui::TreePop();
 			}
 		});
 
@@ -618,11 +620,11 @@ void InspectFields(
 		ZKZ_CONTINUE_IF(Property == nullptr);
 		ZKZ_CONTINUE_IF(Setup.OnlyPropertiesMarked != nullptr && !Property->HasMetaData(Setup.OnlyPropertiesMarked));
 
-		auto* PreviousActiveNode = ChangeNotify.ChangedPropertyChain.GetActiveNode();
-		FProperty* PreviousActiveProperty = PreviousActiveNode ? PreviousActiveNode->GetValue() : nullptr;
+		auto* const PreviousActiveNode = ChangeNotify.ChangedPropertyChain.GetActiveNode();
+		FProperty* const PreviousActiveProperty = PreviousActiveNode ? PreviousActiveNode->GetValue() : nullptr;
 
-		auto* PreviousActiveMemberNode = ChangeNotify.ChangedPropertyChain.GetActiveMemberNode();
-		FProperty* PreviousActiveMemberProperty =
+		auto* const PreviousActiveMemberNode = ChangeNotify.ChangedPropertyChain.GetActiveMemberNode();
+		FProperty* const PreviousActiveMemberProperty =
 			PreviousActiveMemberNode ? PreviousActiveMemberNode->GetValue() : nullptr;
 
 		ChangeNotify.ChangedPropertyChain.AddHead(Property);
