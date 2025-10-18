@@ -18,6 +18,8 @@ namespace ImGuiDeveloperToolkit::PropertyInspector
 namespace Private
 {
 
+constexpr ImGuiTreeNodeFlags DefaultTreeNodeFlags = ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_AllowOverlap;
+
 template <class T, class Enable = void>
 constexpr bool TIsNumericPropertyV = false;
 
@@ -115,7 +117,7 @@ void ShowCompoundTypeChildren(
 
 		const UStruct* const CurrentStruct = StructHierarchy[HierarchyIdx];
 		const bool bNodeOpen = ImGui::TreeNodeEx(
-			CurrentStruct, ImGuiTreeNodeFlags_None, "{%s}", IGDT_TEXT_TO_CSTR(CurrentStruct->GetDisplayNameText()));
+			CurrentStruct, DefaultTreeNodeFlags, "{%s}", IGDT_TEXT_TO_CSTR(CurrentStruct->GetDisplayNameText()));
 		SetStructItemTooltip(*CurrentStruct);
 
 		if (!bNodeOpen)
@@ -445,6 +447,12 @@ struct FStructPropertyInspector : FPropertyInspector_Node
 	}
 
 	template <class OuterType>
+	static bool HasChildren(const FPropertyType& Property, const OuterType* const Outer, const FInspectorSetup& Setup)
+	{
+		return Setup.bRecurseIntoStructs;
+	}
+
+	template <class OuterType>
 	static void ShowChildren(
 		FPropertyType& Property,
 		FPropertyAccessChangeNotify& ChangeNotify,
@@ -541,27 +549,26 @@ void InspectProperty(
 	Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 	const FInspectorSetup& Setup)
 {
-	bool PropertyMatched = false;
+	bool bPropertyMatched = false;
 
 	Zkz::ForEachVariantType<FPropertyInspector>(
 		[&]<class VariantType>(Zkz::TTypeTag<VariantType>)
 		{
-			ZKZ_RETURN_IF(PropertyMatched);
+			ZKZ_RETURN_IF(bPropertyMatched);
 
 			using FPropertyType = VariantType::FPropertyType;
 			FPropertyType* const VariantProperty = ExactCastField<FPropertyType>(&Property);
 			ZKZ_RETURN_IF(!VariantProperty);
 
-			PropertyMatched = true;
+			bPropertyMatched = true;
 
 			ImGui::TableNextRow();
 
 			ImGui::TableNextColumn();
-			const bool bNodeExpanded = ImGui::TreeNodeEx(
+			const bool bHasChildren = VariantType::HasChildren(*VariantProperty, Outer, Setup);
+			const bool bNodeVisible = ImGui::TreeNodeEx(
 				VariantProperty,
-				ImGuiTreeNodeFlags_SpanAllColumns
-					| (VariantType::HasChildren(*VariantProperty, Outer, Setup) ? ImGuiTreeNodeFlags_None
-																				: ImGuiTreeNodeFlags_Leaf),
+				DefaultTreeNodeFlags | (bHasChildren ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_Leaf),
 				"%s",
 				Label);
 			SetPropertyItemTooltip(Property);
@@ -569,12 +576,31 @@ void InspectProperty(
 			ImGui::TableNextColumn();
 			VariantType::ShowRightColumn(*VariantProperty, ChangeNotify, Outer, OuterObject, Setup);
 
-			if (bNodeExpanded)
+			if (bHasChildren)
 			{
 				VariantType::ShowChildren(*VariantProperty, ChangeNotify, Outer, OuterObject, Setup);
+			}
+
+			if (bNodeVisible)
+			{
 				ImGui::TreePop();
 			}
 		});
+
+	if (!bPropertyMatched)
+	{
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		const bool bNodeVisible =
+			ImGui::TreeNodeEx(&Property, DefaultTreeNodeFlags | ImGuiTreeNodeFlags_Leaf, "%s", Label);
+		SetPropertyItemTooltip(Property);
+		ImGui::TableNextColumn();
+		ImGui::Text("Unsupported type: %s", IGDT_TEXT_TO_CSTR(Property.GetClass()->GetDisplayNameText()));
+		if (bNodeVisible)
+		{
+			ImGui::TreePop();
+		}
+	}
 }
 
 template <class T>
@@ -627,34 +653,6 @@ void Inspect(
 {
 	// #TODO_dontcommit inline if works (i.e. eliminate this function and use InspectProperty
 	InspectProperty(Label, Property, ChangeNotify, Outer, OuterObject, Setup);
-
-	// if (
-	// 	// NumericProperty subtypes
-	// 	FTryInspect<FByteProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FDoubleProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FFloatProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FInt8Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FInt64Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FIntProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FUInt16Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FUInt32Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FUInt64Property, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	// Other properties
-	// 	|| FTryInspect<FStrProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FBoolProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FArrayProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FEnumProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FStructProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup)
-	// 	|| FTryInspect<FObjectProperty, T>{}(Label, Property, ChangeNotify, Outer, OuterObject, Setup))
-	// {
-	// 	return;
-	// }
-	//
-	// ImGui::TableNextRow();
-	// ImGui::TableNextColumn();
-	// ImGui::Text("%s", Label);
-	// ImGui::TableNextColumn();
-	// ImGui::Text("Unsupported type: %s", IGDT_TEXT_TO_CSTR(Property.GetClass()->GetDisplayNameText()));
 }
 
 /// Inspect function for types - shows a label next to the type's display name. If bRecurseInto is true, also
@@ -674,7 +672,7 @@ void Inspect(
 	ImGui::TableNextColumn();
 
 	const bool bTreeNodeOpen = ImGui::TreeNodeEx(
-		Label, ImGuiTreeNodeFlags_SpanFullWidth | (bRecurseInto ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_Leaf));
+		Label, DefaultTreeNodeFlags | (bRecurseInto ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_Leaf));
 	if (ToolTip != nullptr)
 	{
 		ImGui::SetItemTooltip("%s", ToolTip);
