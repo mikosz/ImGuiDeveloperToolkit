@@ -89,6 +89,7 @@ void UDemoImGuiDeveloperToolkitTool::EnsureHasDemoData()
 void UDemoImGuiDeveloperToolkitTool::ShowDemoWindow(bool* Open)
 {
 	using namespace ImGuiDeveloperToolkit::PropertyInspector;
+	using namespace ImGuiDeveloperToolkit::Widgets;
 
 	ON_SCOPE_EXIT
 	{
@@ -105,7 +106,7 @@ void UDemoImGuiDeveloperToolkitTool::ShowDemoWindow(bool* Open)
 	if (ImGui::CollapsingHeader("Property inspector"))
 	{
 		const auto ShowPropertyInspectorSetup =
-			[](const char* const Label, FInspectorSetup& Setup, bool bWithSuperclassSelector)
+			[](const char* const Label, FInspectorSetup& Setup, const bool bWithSuperclassSelector)
 		{
 			if (!ImGui::TreeNodeEx(Label))
 			{
@@ -134,15 +135,22 @@ void UDemoImGuiDeveloperToolkitTool::ShowDemoWindow(bool* Open)
 			{
 				TSubclassOf<UImGuiDemoDeveloperToolkitTool_GrandparentClass> OnlyChildrenOf =
 					Cast<UClass>(Setup.OnlyChildrenOf);
-				if (ImGuiDeveloperToolkit::Widgets::ClassCombo("Only children of", OnlyChildrenOf))
+				if (ClassCombo(
+						"Only children of", OnlyChildrenOf, FClassComboMask{} | EClassComboFlags::IncludeAbstract))
 				{
 					Setup.OnlyChildrenOf = OnlyChildrenOf;
+				}
+				
+				ImGui::SameLine();
+				if (ImGui::Button("Clear"))
+				{
+					Setup.OnlyChildrenOf = nullptr;
 				}
 			}
 
 			ImGui::Checkbox("Include deprecated", &Setup.bIncludeDeprecated);
-			ShowTypeSetup("Child struct setup", Setup.ChildStructureSetup);
-			ShowTypeSetup("Child object setup", Setup.ChildObjectSetup);
+			ShowTypeSetup("Struct setup", Setup.StructSetup);
+			ShowTypeSetup("Object setup", Setup.ObjectSetup);
 
 			ImGui::Separator();
 		};
@@ -151,6 +159,6 @@ void UDemoImGuiDeveloperToolkitTool::ShowDemoWindow(bool* Open)
 		Inspect("ChildStruct", DemoData->Struct, this, DemoData->PropertyInspectorSetup_Struct);
 
 		ShowPropertyInspectorSetup("Class inspector setup", DemoData->PropertyInspectorSetup_Class, true);
-		Inspect("ChildClass", *DemoData->Class, DemoData->PropertyInspectorSetup_Struct);
+		Inspect("ChildClass", *DemoData->Class, DemoData->PropertyInspectorSetup_Class);
 	}
 }

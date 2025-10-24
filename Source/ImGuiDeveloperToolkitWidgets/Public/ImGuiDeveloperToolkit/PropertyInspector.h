@@ -28,11 +28,11 @@ struct FInspectorSetup
 	/// USceneComponent, and UActorComponent.
 	UStruct* OnlyChildrenOf = nullptr;
 
-	/// Setup for displaying properties of child structures
-	FTypeSetup ChildStructureSetup = {.bRecurseInto = true, .bShowHierarchy = false, .bShowCategories = true};
+	/// Setup for displaying properties of structures
+	FTypeSetup StructSetup = {.bRecurseInto = true, .bShowHierarchy = false, .bShowCategories = true};
 
 	/// Setup for displaying properties of pointed-to objects
-	FTypeSetup ChildObjectSetup = {.bRecurseInto = false, .bShowHierarchy = true, .bShowCategories = false};
+	FTypeSetup ObjectSetup = {.bRecurseInto = false, .bShowHierarchy = true, .bShowCategories = false};
 
 	/// If set, will only show properties marked with the given meta tag
 	const TCHAR* OnlyPropertiesMarked = nullptr;

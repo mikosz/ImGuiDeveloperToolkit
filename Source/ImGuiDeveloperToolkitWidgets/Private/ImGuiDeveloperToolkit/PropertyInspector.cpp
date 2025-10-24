@@ -128,6 +128,11 @@ void ShowCompoundTypeChildren(
 			ZKZ_CONTINUE_IF(Property == nullptr);
 			ZKZ_CONTINUE_IF(
 				Setup.OnlyPropertiesMarked != nullptr && !Property->HasMetaData(Setup.OnlyPropertiesMarked));
+			// #TODO_dontcommit: this also excludes struct fields
+			ZKZ_CONTINUE_IF(
+				Setup.OnlyChildrenOf != nullptr
+				&& (Property->GetOwnerClass() == nullptr
+					|| !Property->GetOwnerClass()->IsChildOf(Setup.OnlyChildrenOf)));
 
 			static FString EmptyCategory;
 			const FString& Category = TypeSetup.bShowCategories ? Property->GetMetaData("Category") : EmptyCategory;
@@ -530,7 +535,7 @@ struct FStructPropertyInspector : FPropertyInspector_Node
 	template <class OuterType>
 	static bool HasChildren(const FPropertyType& Property, const OuterType* const Outer, const FInspectorSetup& Setup)
 	{
-		return Setup.ChildStructureSetup.bRecurseInto;
+		return Setup.StructSetup.bRecurseInto;
 	}
 
 	template <class OuterType>
@@ -543,8 +548,7 @@ struct FStructPropertyInspector : FPropertyInspector_Node
 	{
 		auto* const StructInstance = Property.ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, void>>(Outer);
 
-		ShowCompoundTypeChildren(
-			*Property.Struct, ChangeNotify, StructInstance, OuterObject, Setup, Setup.ChildStructureSetup);
+		ShowCompoundTypeChildren(*Property.Struct, ChangeNotify, StructInstance, OuterObject, Setup, Setup.StructSetup);
 	}
 };
 
@@ -558,7 +562,7 @@ struct FObjectPropertyInspector : FPropertyInspector_Node
 		using QualifiedPointerType = Zkz::TCopyConstType<OuterType, UObject>*;
 		const QualifiedPointerType Object = Property.GetObjectPropertyValue_InContainer(Outer);
 
-		return Setup.ChildObjectSetup.bRecurseInto && Object != nullptr;
+		return Setup.ObjectSetup.bRecurseInto && Object != nullptr;
 	}
 
 	template <class OuterType>
@@ -601,7 +605,7 @@ struct FObjectPropertyInspector : FPropertyInspector_Node
 		using QualifiedPointerType = Zkz::TCopyConstType<OuterType, UObject>*;
 		const QualifiedPointerType Object = Property.GetObjectPropertyValue_InContainer(Outer);
 
-		ShowCompoundTypeChildren(*Property.PropertyClass, ChangeNotify, Object, Object, Setup, Setup.ChildObjectSetup);
+		ShowCompoundTypeChildren(*Property.PropertyClass, ChangeNotify, Object, Object, Setup, Setup.ObjectSetup);
 	}
 };
 
@@ -803,13 +807,7 @@ void Inspect(
 	ChangeNotify.ChangedObject = OuterObject;
 
 	Private::CreateKeyValueTableAndInspect(
-		Label,
-		Struct,
-		ChangeNotify,
-		Instance,
-		OuterObject,
-		Setup,
-		Private::GetTypeSetupForBase(Setup.ChildStructureSetup));
+		Label, Struct, ChangeNotify, Instance, OuterObject, Setup, Private::GetTypeSetupForBase(Setup.StructSetup));
 }
 
 void Inspect(
@@ -822,13 +820,7 @@ void Inspect(
 	FPropertyAccessChangeNotify ChangeNotify;
 
 	Private::CreateKeyValueTableAndInspect(
-		Label,
-		Struct,
-		ChangeNotify,
-		Instance,
-		OuterObject,
-		Setup,
-		Private::GetTypeSetupForBase(Setup.ChildStructureSetup));
+		Label, Struct, ChangeNotify, Instance, OuterObject, Setup, Private::GetTypeSetupForBase(Setup.StructSetup));
 }
 
 void Inspect(const char* Label, const UClass& Class, UObject& Instance, const FInspectorSetup& Setup)
@@ -837,7 +829,7 @@ void Inspect(const char* Label, const UClass& Class, UObject& Instance, const FI
 	ChangeNotify.ChangedObject = &Instance;
 
 	Private::CreateKeyValueTableAndInspect(
-		Label, Class, ChangeNotify, &Instance, &Instance, Setup, Private::GetTypeSetupForBase(Setup.ChildObjectSetup));
+		Label, Class, ChangeNotify, &Instance, &Instance, Setup, Private::GetTypeSetupForBase(Setup.ObjectSetup));
 }
 
 void Inspect(const char* Label, const UClass& Class, const UObject& Instance, const FInspectorSetup& Setup)
@@ -845,7 +837,7 @@ void Inspect(const char* Label, const UClass& Class, const UObject& Instance, co
 	FPropertyAccessChangeNotify ChangeNotify;
 
 	Private::CreateKeyValueTableAndInspect(
-		Label, Class, ChangeNotify, &Instance, &Instance, Setup, Private::GetTypeSetupForBase(Setup.ChildObjectSetup));
+		Label, Class, ChangeNotify, &Instance, &Instance, Setup, Private::GetTypeSetupForBase(Setup.ObjectSetup));
 }
 
 }  // namespace ImGuiDeveloperToolkit::PropertyInspector

@@ -46,7 +46,7 @@ struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDemoDeveloperToolkitTool_ChildSt
 	int32 ParentProperty = 42;
 };
 
-UCLASS(Blueprintable, DisplayName = "Grandparent class")
+UCLASS(Abstract, Blueprintable, DisplayName = "Grandparent class")
 class IMGUIDEVELOPERTOOLKITSUBSYSTEM_API UImGuiDemoDeveloperToolkitTool_GrandparentClass : public UObject
 {
 	GENERATED_BODY()
@@ -82,6 +82,13 @@ public:
 
 	UPROPERTY(DisplayName = "Child class deprecated property (int32)", meta = (DeprecatedProperty))
 	int32 DeprecatedPropertyInChild_DEPRECATED = 666;
+};
+
+UCLASS(DisplayName = "Deprecated Child class", Deprecated)
+class IMGUIDEVELOPERTOOLKITSUBSYSTEM_API UDEPRECATED_ImGuiDemoDeveloperToolkitTool_DeprecatedChildClass
+	: public UImGuiDemoDeveloperToolkitTool_ParentClass
+{
+	GENERATED_BODY()
 };
 
 UCLASS()
