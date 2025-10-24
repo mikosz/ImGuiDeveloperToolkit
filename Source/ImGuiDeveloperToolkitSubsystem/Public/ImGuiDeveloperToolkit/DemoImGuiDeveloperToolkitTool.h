@@ -9,9 +9,11 @@
 
 #include "DemoImGuiDeveloperToolkitTool.generated.h"
 
+// #TODO_dontcommit: Demo should go to a separate module and be present only if loaded!
+
 /// Grandparent struct tooltip - docstring
 USTRUCT(DisplayName = "Grandparent struct")
-struct FImGuiDemoDeveloperToolkitTool_GrandparentStruct
+struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDemoDeveloperToolkitTool_GrandparentStruct
 {
 	GENERATED_BODY()
 
@@ -21,16 +23,22 @@ struct FImGuiDemoDeveloperToolkitTool_GrandparentStruct
 };
 
 USTRUCT(DisplayName = "Parent struct", meta = (ToolTip = "Parent struct tooltip - meta"))
-struct FImGuiDemoDeveloperToolkitTool_ParentStruct : public FImGuiDemoDeveloperToolkitTool_GrandparentStruct
+struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDemoDeveloperToolkitTool_ParentStruct
+	: public FImGuiDemoDeveloperToolkitTool_GrandparentStruct
 {
 	GENERATED_BODY()
 
-	UPROPERTY(Category = "Cat B", EditAnywhere, DisplayName = "Parent property (bool)", meta = (ToolTip = "Bool property tooltip - meta"))
+	UPROPERTY(
+		Category = "Cat B",
+		EditAnywhere,
+		DisplayName = "Parent property (bool)",
+		meta = (ToolTip = "Bool property tooltip - meta"))
 	bool bParentProperty = false;
 };
 
 USTRUCT(DisplayName = "Child struct")
-struct FImGuiDemoDeveloperToolkitTool_ChildStruct : public FImGuiDemoDeveloperToolkitTool_ParentStruct
+struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDemoDeveloperToolkitTool_ChildStruct
+	: public FImGuiDemoDeveloperToolkitTool_ParentStruct
 {
 	GENERATED_BODY()
 
@@ -38,9 +46,16 @@ struct FImGuiDemoDeveloperToolkitTool_ChildStruct : public FImGuiDemoDeveloperTo
 	int32 ParentProperty = 42;
 };
 
+UCLASS(Blueprintable, DisplayName = "Grandparent class")
+class IMGUIDEVELOPERTOOLKITSUBSYSTEM_API UImGuiDemoDeveloperToolkitTool_GrandparentClass : public UObject
+{
+	GENERATED_BODY()
+};
+
 /// Parent class tooltip - docstring
 UCLASS(DisplayName = "Parent class")
-class UImGuiDemoDeveloperToolkitTool_ParentClass : public UObject
+class IMGUIDEVELOPERTOOLKITSUBSYSTEM_API UImGuiDemoDeveloperToolkitTool_ParentClass
+	: public UImGuiDemoDeveloperToolkitTool_GrandparentClass
 {
 	GENERATED_BODY()
 
@@ -53,7 +68,8 @@ public:
 };
 
 UCLASS(DisplayName = "Child class", meta = (ToolTip = "Child class tooltip - meta"))
-class UImGuiDemoDeveloperToolkitTool_ChildClass : public UImGuiDemoDeveloperToolkitTool_ParentClass
+class IMGUIDEVELOPERTOOLKITSUBSYSTEM_API UImGuiDemoDeveloperToolkitTool_ChildClass
+	: public UImGuiDemoDeveloperToolkitTool_ParentClass
 {
 	GENERATED_BODY()
 
@@ -69,7 +85,7 @@ public:
 };
 
 UCLASS()
-class UDemoImGuiDeveloperToolkitTool : public UImGuiDeveloperToolkitTool
+class IMGUIDEVELOPERTOOLKITSUBSYSTEM_API UDemoImGuiDeveloperToolkitTool : public UImGuiDeveloperToolkitTool
 {
 	GENERATED_BODY()
 public:
@@ -85,10 +101,11 @@ private:
 
 	struct FStructDemoData
 	{
-		ImGuiDeveloperToolkit::PropertyInspector::FInspectorSetup PropertyInspectorSetup;
+		ImGuiDeveloperToolkit::PropertyInspector::FInspectorSetup PropertyInspectorSetup_Struct;
+		FImGuiDemoDeveloperToolkitTool_ChildStruct Struct;
 
-		FImGuiDemoDeveloperToolkitTool_ChildStruct ChildStruct;
-		TStrongObjectPtr<UImGuiDemoDeveloperToolkitTool_ChildClass> ChildClass;
+		ImGuiDeveloperToolkit::PropertyInspector::FInspectorSetup PropertyInspectorSetup_Class;
+		TStrongObjectPtr<UImGuiDemoDeveloperToolkitTool_ChildClass> Class;
 	};
 
 	TUniquePtr<FStructDemoData> DemoData;

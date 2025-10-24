@@ -114,8 +114,8 @@ void ShowCompoundTypeChildren(
 {
 	const auto InspectFields = [&](TFieldIterator<FProperty> FieldIt)
 	{
-		constexpr int32 NumInlineProperties = 64;
-		constexpr int32 NumInlineCategories = 16;
+		constexpr int32 NumInlineProperties = 128;
+		constexpr int32 NumInlineCategories = 32;
 		using FProperties = TArray<FProperty*, TInlineAllocator<NumInlineProperties>>;
 		using FPropertiesByCategory = TMap<FString, FProperties, TInlineSetAllocator<NumInlineCategories>>;
 

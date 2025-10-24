@@ -1,5 +1,6 @@
-﻿#include "DemoImGuiDeveloperToolkitTool.h"
+﻿#include "ImGuiDeveloperToolkit/DemoImGuiDeveloperToolkitTool.h"
 
+#include "ImGuiDeveloperToolkit/ClassCombo.h"
 #include "ImGuiDeveloperToolkit/PropertyInspector.h"
 #include "Zakazane/ReturnIfMacros.h"
 #include "imgui.h"
@@ -81,8 +82,8 @@ void UDemoImGuiDeveloperToolkitTool::EnsureHasDemoData()
 	DemoData = MakeUnique<FStructDemoData>();
 	check(DemoData.IsValid());
 
-	DemoData->ChildClass.Reset(NewObject<UImGuiDemoDeveloperToolkitTool_ChildClass>(this));
-	check(DemoData->ChildClass.IsValid());
+	DemoData->Class.Reset(NewObject<UImGuiDemoDeveloperToolkitTool_ChildClass>(this));
+	check(DemoData->Class.IsValid());
 }
 
 void UDemoImGuiDeveloperToolkitTool::ShowDemoWindow(bool* Open)
@@ -103,26 +104,53 @@ void UDemoImGuiDeveloperToolkitTool::ShowDemoWindow(bool* Open)
 
 	if (ImGui::CollapsingHeader("Property inspector"))
 	{
-		const auto ShowTypeSetup = [](const char* const Label, FInspectorSetup::FTypeSetup& Setup)
+		const auto ShowPropertyInspectorSetup =
+			[](const char* const Label, FInspectorSetup& Setup, bool bWithSuperclassSelector)
 		{
-			ImGui::PushID(&Setup);
-			if (ImGui::TreeNodeEx(Label))
+			if (!ImGui::TreeNodeEx(Label))
 			{
-				ImGui::Checkbox("Recurse into", &Setup.bRecurseInto);
-				ImGui::Checkbox("Show categories", &Setup.bShowCategories);
-				ImGui::Checkbox("Show hierarchy", &Setup.bShowHierarchy);
-				ImGui::TreePop();
+				return;
 			}
-			ImGui::PopID();
+
+			ON_SCOPE_EXIT
+			{
+				ImGui::TreePop();
+			};
+
+			const auto ShowTypeSetup = [](const char* const Label, FInspectorSetup::FTypeSetup& TypeSetup)
+			{
+				ImGui::PushID(&TypeSetup);
+				if (ImGui::TreeNodeEx(Label))
+				{
+					ImGui::Checkbox("Recurse into", &TypeSetup.bRecurseInto);
+					ImGui::Checkbox("Show categories", &TypeSetup.bShowCategories);
+					ImGui::Checkbox("Show hierarchy", &TypeSetup.bShowHierarchy);
+					ImGui::TreePop();
+				}
+				ImGui::PopID();
+			};
+
+			if (bWithSuperclassSelector)
+			{
+				TSubclassOf<UImGuiDemoDeveloperToolkitTool_GrandparentClass> OnlyChildrenOf =
+					Cast<UClass>(Setup.OnlyChildrenOf);
+				if (ImGuiDeveloperToolkit::Widgets::ClassCombo("Only children of", OnlyChildrenOf))
+				{
+					Setup.OnlyChildrenOf = OnlyChildrenOf;
+				}
+			}
+
+			ImGui::Checkbox("Include deprecated", &Setup.bIncludeDeprecated);
+			ShowTypeSetup("Child struct setup", Setup.ChildStructureSetup);
+			ShowTypeSetup("Child object setup", Setup.ChildObjectSetup);
+
+			ImGui::Separator();
 		};
 
-		ImGui::Checkbox("Include deprecated", &DemoData->PropertyInspectorSetup.bIncludeDeprecated);
-		ShowTypeSetup("Child struct setup", DemoData->PropertyInspectorSetup.ChildStructureSetup);
-		ShowTypeSetup("Child object setup", DemoData->PropertyInspectorSetup.ChildObjectSetup);
+		ShowPropertyInspectorSetup("Struct inspector setup", DemoData->PropertyInspectorSetup_Struct, false);
+		Inspect("ChildStruct", DemoData->Struct, this, DemoData->PropertyInspectorSetup_Struct);
 
-		ImGui::Separator();
-
-		Inspect("ChildStruct", DemoData->ChildStruct, this, DemoData->PropertyInspectorSetup);
-		Inspect("ChildClass", *DemoData->ChildClass, DemoData->PropertyInspectorSetup);
+		ShowPropertyInspectorSetup("Class inspector setup", DemoData->PropertyInspectorSetup_Class, true);
+		Inspect("ChildClass", *DemoData->Class, DemoData->PropertyInspectorSetup_Struct);
 	}
 }
