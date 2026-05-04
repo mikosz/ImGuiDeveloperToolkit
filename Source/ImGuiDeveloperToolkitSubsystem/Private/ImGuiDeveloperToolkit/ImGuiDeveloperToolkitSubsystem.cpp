@@ -4,6 +4,7 @@
 
 #include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitTool.h"
 #include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitWindow.h"
+#include "Zakazane/ReturnIfMacros.h"
 
 #include <imgui.h>
 
@@ -32,10 +33,17 @@ bool IsWithinCurrentContext(const UImGuiDeveloperToolkitTool& Tool)
 
 }  // namespace ImGuiDeveloperToolkitSubsystemPrivate
 
+UImGuiDeveloperToolkitSubsystem* UImGuiDeveloperToolkitSubsystem::Get()
+{
+	ZKZ_RETURN_IF_INVALID(GEngine, nullptr);
+	return GEngine->GetEngineSubsystem<UImGuiDeveloperToolkitSubsystem>();
+}
+
 void UImGuiDeveloperToolkitSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
+	ConfigurationWindow.Initialize();
 	PopulateTools();
 }
 
@@ -49,11 +57,16 @@ bool UImGuiDeveloperToolkitSubsystem::IsShow() const
 	return bShow;
 }
 
+void UImGuiDeveloperToolkitSubsystem::ShowConfigurationWindow()
+{
+	ConfigurationWindow.bShown = true;
+}
+
 void UImGuiDeveloperToolkitSubsystem::Tick(const float DeltaTime)
 {
 	using namespace ImGuiDeveloperToolkitSubsystemPrivate;
 
-	ImFont* const Font = Configuration.GetFont();
+	ImFont* const Font = ConfigurationWindow.GetFont();
 	if (Font != nullptr)
 	{
 		ImGui::PushFont(Font);
@@ -169,14 +182,14 @@ void UImGuiDeveloperToolkitSubsystem::TickMainWindow(const float DeltaTime)
 
 void UImGuiDeveloperToolkitSubsystem::TickConfigurationWindow(const float DeltaTime)
 {
-	Configuration.Tick(DeltaTime);
+	ConfigurationWindow.Tick(DeltaTime);
 }
 
 void UImGuiDeveloperToolkitSubsystem::TickMainMenu(const float DeltaTime)
 {
 	if (ImGui::BeginMenuBar())
 	{
-		Configuration.bShown = ImGui::MenuItem("Configuration") || Configuration.bShown;
+		ConfigurationWindow.bShown = ImGui::MenuItem("Configuration") || ConfigurationWindow.bShown;
 		ImGui::EndMenuBar();
 	}
 }
@@ -200,7 +213,7 @@ void UImGuiDeveloperToolkitSubsystem::TickToolList(const float DeltaTime)
 		{
 			if (ImGui::Button(*ToolName))
 			{
-				Configuration.SetShown(ToolName, true);
+				ConfigurationWindow.SetToolShown(ToolName, true);
 				bShow = false;
 			}
 		}
@@ -222,9 +235,9 @@ void UImGuiDeveloperToolkitSubsystem::TickTools(const float DeltaTime)
 
 		const FAnsiString ToolName = Tool->GetToolName();
 
-		bool bShown = true; //Configuration.IsShown(ToolName);
-		Tool->Tick(DeltaTime, bShown, Context, World);
+		bool bToolShown = ConfigurationWindow.IsShown(ToolName);
+		Tool->Tick(DeltaTime, bToolShown, Context, World);
 
-		Configuration.SetShown(ToolName, bShown);
+		ConfigurationWindow.SetToolShown(ToolName, bToolShown);
 	}
 }

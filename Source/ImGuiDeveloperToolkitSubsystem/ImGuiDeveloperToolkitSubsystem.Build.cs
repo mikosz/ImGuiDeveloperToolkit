@@ -11,7 +11,6 @@ public class ImGuiDeveloperToolkitSubsystem : ModuleRules
 		PublicIncludePaths.AddRange(
 			new string[]
 			{
-				// ... add public include paths required here ...
 			}
 		);
 
@@ -19,7 +18,6 @@ public class ImGuiDeveloperToolkitSubsystem : ModuleRules
 		PrivateIncludePaths.AddRange(
 			new string[]
 			{
-				// ... add other private include paths required here ...
 			}
 		);
 
@@ -28,8 +26,8 @@ public class ImGuiDeveloperToolkitSubsystem : ModuleRules
 			new[]
 			{
 				"Core",
-				"ImGuiLibrary"
-				// ... add other public dependencies that you statically link with here ...
+				"ImGuiLibrary",
+				"ZakazaneUtilities"
 			}
 		);
 
@@ -43,7 +41,6 @@ public class ImGuiDeveloperToolkitSubsystem : ModuleRules
 				"ImGuiDeveloperToolkitWidgets",
 				"Slate",
 				"SlateCore"
-				// ... add private dependencies that you statically link with here ...	
 			}
 		);
 
@@ -51,7 +48,6 @@ public class ImGuiDeveloperToolkitSubsystem : ModuleRules
 
 		DynamicallyLoadedModuleNames.AddRange(
 			[
-				// ... add any modules that your module loads dynamically here ...
 			]
 		);
 	}

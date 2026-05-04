@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 
-#include "ImGuiDeveloperToolkitConfiguration.h"
+#include "ImGuiDeveloperToolkitConfigurationWindow.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 
 #include "ImGuiDeveloperToolkitSubsystem.generated.h"
@@ -20,8 +20,7 @@ class IMGUIDEVELOPERTOOLKITSUBSYSTEM_API UImGuiDeveloperToolkitSubsystem final :
 {
 	GENERATED_BODY()
 public:
-	UPROPERTY(VisibleAnywhere)
-	FImGuiDeveloperToolkitConfiguration Configuration;
+	static UImGuiDeveloperToolkitSubsystem* Get();
 
 	// ~ USubsystem
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
@@ -33,19 +32,17 @@ public:
 	UFUNCTION(Category = "DeveloperToolkit")
 	bool IsShow() const;
 
-private:
+	void ShowConfigurationWindow();
+
 	// ~ FTickableGameObject
 	virtual void Tick(float DeltaTime) override;
-
 	virtual TStatId GetStatId() const override;
-
 	virtual UWorld* GetTickableGameObjectWorld() const override;
-
 	virtual bool IsTickableInEditor() const override;
-
 	virtual bool IsTickableWhenPaused() const override;
 	// ~ FTickableGameObject
 
+private:
 	void PopulateTools();
 
 	void TickMainWindow(float DeltaTime);
@@ -57,6 +54,8 @@ private:
 	void TickToolList(float DeltaTime);
 
 	void TickTools(float DeltaTime);
+
+	FImGuiDeveloperToolkitConfigurationWindow ConfigurationWindow;
 
 	UPROPERTY(Transient, VisibleAnywhere)
 	bool bShow = false;

@@ -276,7 +276,7 @@ struct TNumericPropertyInspector : FPropertyInspector_Leaf
 	{
 		using TCppType = FPropertyType::TCppType;
 
-		constexpr bool bIsConst = TIsConst<OuterType>::Value;
+		constexpr bool bIsConst = std::is_const_v<OuterType>;
 
 		auto* Ptr = Property.template ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, TCppType>>(Outer);
 		TCppType Value = Property.GetPropertyValue(Ptr);
@@ -315,7 +315,7 @@ struct FStringPropertyInspector : FPropertyInspector_Leaf
 		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup)
 	{
-		constexpr bool bIsConst = TIsConst<OuterType>::Value;
+		constexpr bool bIsConst = std::is_const_v<OuterType>;
 
 		auto* Ptr = Property.ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, FString>>(Outer);
 		const FString& OldValue = FPropertyType::GetPropertyValue(Ptr);
@@ -348,7 +348,7 @@ struct FBoolPropertyInspector : FPropertyInspector_Leaf
 		Zkz::TCopyConstType<OuterType, UObject>* OuterObject,
 		const FInspectorSetup& Setup)
 	{
-		constexpr bool bIsConst = TIsConst<OuterType>::Value;
+		constexpr bool bIsConst = std::is_const_v<OuterType>;
 
 		auto* Ptr = Property.ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, bool>>(Outer);
 		const bool OldValue = Property.GetPropertyValue(Ptr);
@@ -387,7 +387,7 @@ struct FEnumPropertyInspector : FPropertyInspector_Leaf
 		FNumericProperty* UnderlyingProperty = Property.GetUnderlyingProperty();
 		ZKZ_RETURN_IF(!UnderlyingProperty);
 
-		constexpr bool bIsConst = TIsConst<OuterType>::Value;
+		constexpr bool bIsConst = std::is_const_v<OuterType>;
 
 		auto* Ptr = Property.ContainerPtrToValuePtr<Zkz::TCopyConstType<OuterType, void>>(Outer);
 		Zkz::TCopyConstType<OuterType, int64> EnumValue = UnderlyingProperty->GetSignedIntPropertyValue(Ptr);
@@ -437,7 +437,7 @@ struct FArrayPropertyInspector : FPropertyInspector_Node
 			ImGui::PopID();
 		};
 
-		constexpr bool bIsConst = TIsConst<OuterType>::Value;
+		constexpr bool bIsConst = std::is_const_v<OuterType>;
 		if constexpr (!bIsConst)
 		{
 			ImGui::SameLine();
