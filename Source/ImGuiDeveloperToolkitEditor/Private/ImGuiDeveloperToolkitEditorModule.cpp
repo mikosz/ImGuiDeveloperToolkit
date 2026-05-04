@@ -13,7 +13,7 @@ void FImGuiDeveloperToolkitEditorModule::StartupModule()
 
 	auto& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
 	PropertyEditorModule.RegisterCustomClassLayout(
-		Zkz::GetClassName<UImGuiDeveloperToolkitSettings>().Get({}),
+		Zkz::GetClassFName<UImGuiDeveloperToolkitSettings>().Get({}),
 		FOnGetDetailCustomizationInstance::CreateStatic(
 			&Editor::FShowConfigurationWindowSettingsCustomization::MakeInstance));
 }
@@ -25,7 +25,7 @@ void FImGuiDeveloperToolkitEditorModule::ShutdownModule()
 	UnregisterEditorCommands();
 
 	auto& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
-	PropertyEditorModule.UnregisterCustomClassLayout(Zkz::GetClassName<UImGuiDeveloperToolkitSettings>().Get({}));
+	PropertyEditorModule.UnregisterCustomClassLayout(Zkz::GetClassFName<UImGuiDeveloperToolkitSettings>().Get({}));
 }
 
 IMPLEMENT_MODULE(FImGuiDeveloperToolkitEditorModule, ImGuiDeveloperToolkitEditor)
