@@ -1,10 +1,12 @@
 ﻿#include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitConfigurationWindow.h"
 
 #include "ImGuiContext.h"
-#include "ImGuiDeveloperToolkit/AutoWidget.h"
 #include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitWindow.h"
 #include "ImGuiDeveloperToolkit/Private/EnumValueRange.h"
+#include "ImGuiDeveloperToolkit/Text.h"
 #include "ImageUtils.h"
+#include "String/Join.h"
+#include "Zakazane/ContinueIfMacros.h"
 #include "Zakazane/ReturnIfMacros.h"
 
 // #TODO_dontcommit: a bunch of utf8 <-> Fstring casts in this file that we don't want
@@ -12,47 +14,21 @@
 namespace ImGuiDeveloperToolkitConfigurationPrivate
 {
 
-// #TODO_dontcommit check which unused and remove
-template <class StringType>
-StringType JoinGlyphsAsString(const EImGuiDeveloperToolkitGlyphRanges Mask, const StringType& Separator)
+TArray<ImWchar> MakeGlyphRanges(const TArray<FName>& GlyphRangeNames)
 {
 	using namespace ImGuiDeveloperToolkit::Private;
 
-	return StringType::JoinBy(
-		TMaskEnumValueRange<EImGuiDeveloperToolkitGlyphRanges>{Mask},
-		*Separator,
-		&TEnumValue<EImGuiDeveloperToolkitGlyphRanges>::GetName);
-}
+	TArray<ImWchar> Ranges;
 
-template <class ArrayType>
-void MakeGlyphRanges(ArrayType& Ranges, const EImGuiDeveloperToolkitGlyphRanges Mask)
-{
-	using namespace ImGuiDeveloperToolkit::Private;
-
-	for (TEnumValue EnumValue : TMaskEnumValueRange{Mask})
+	for (const FName GlyphRangeName : GlyphRangeNames)
 	{
-		switch (EnumValue.GetValue())
+		const auto* const GlyphRanges = UImGuiDeveloperToolkitSettings::Get().FindGlyphRangesByName(GlyphRangeName);
+		ZKZ_CONTINUE_IF(GlyphRanges == nullptr);
+
+		for (const auto [FirstGlyph, LastGlyph] : GlyphRanges->Ranges)
 		{
-			case EImGuiDeveloperToolkitGlyphRanges::BasicLatin:
-				Ranges.Append({0x0020, 0x007F});
-				break;
-			case EImGuiDeveloperToolkitGlyphRanges::Polish:
-				Ranges.Append({
-					0x0104, 0x0105,	 // Ą, ą
-					0x0106, 0x0107,	 // Ć, ć
-					0x0118, 0x0119,	 // Ę, ę
-					0x0141, 0x0142,	 // Ł, ł
-					0x0143, 0x0144,	 // Ń, ń
-					0x00D3, 0x00D3,	 // Ó
-					0x00F3, 0x00F3,	 // ó
-					0x015A, 0x015B,	 // Ś, ś
-					0x0179, 0x017A,	 // Ź, ź
-					0x017B, 0x017C	 // Ż, ż
-				});
-				break;
-			default:
-				ensureMsgf(false, TEXT("Unexpected enum value: %s"), *EnumValue.GetName());
-				break;
+			Ranges.Emplace(FirstGlyph);
+			Ranges.Emplace(LastGlyph);
 		}
 	}
 
@@ -60,6 +36,97 @@ void MakeGlyphRanges(ArrayType& Ranges, const EImGuiDeveloperToolkitGlyphRanges 
 	{
 		Ranges.Emplace(0);
 	}
+
+	return Ranges;
+}
+
+bool TickFontCombo(
+	UImGuiDeveloperToolkitSettings& SettingsObject, const TMap<FUtf8String, FUtf8String>& AvailableFontPathsByName)
+{
+	auto& FontSettings = SettingsObject.FontSettings;
+	bool bResult = false;
+
+	if (!AvailableFontPathsByName.IsEmpty())
+	{
+		if (ImGui::BeginCombo(
+				"Font",
+				FontSettings.GetName().IsEmpty() ? "Select font"
+												 : reinterpret_cast<const char*>(*FUtf8String{FontSettings.GetName()})))
+		{
+			for (const auto& [Name, Path] : AvailableFontPathsByName)
+			{
+				if (ImGui::Selectable(reinterpret_cast<const char*>(*Name), FontSettings.GetName() == FString{Name}))
+				{
+					bResult = true;
+					FontSettings.SetName(SettingsObject, FString{Name});
+				}
+			}
+
+			ImGui::EndCombo();
+		}
+	}
+
+	return bResult;
+}
+
+bool TickGlyphRangesSelectables(
+	UImGuiDeveloperToolkitSettings& SettingsObject,
+	TArrayView<const FImGuiDeveloperToolkitFontGlyphRanges> GlyphRangesArray)
+{
+	auto& FontSettings = SettingsObject.FontSettings;
+
+	for (const auto& GlyphRanges : GlyphRangesArray)
+	{
+		// #TODO #DeveloperToolkit: consider changing to a popup with multiple checkboxes, this would allow
+		// to only show the reset button when changes committed.
+		if (ImGui::Selectable(
+				reinterpret_cast<const char*>(*GlyphRanges.Name.ToUtf8String()),
+				FontSettings.GetGlyphRanges().Contains(GlyphRanges.Name)))
+		{
+			auto NewGlyphRanges = FontSettings.GetGlyphRanges();
+			NewGlyphRanges.Emplace(GlyphRanges.Name);
+			FontSettings.SetGlyphRanges(SettingsObject, MoveTemp(NewGlyphRanges));
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool TickGlyphRangesCombo(UImGuiDeveloperToolkitSettings& SettingsObject)
+{
+	const auto& FontSettings = SettingsObject.FontSettings;
+
+	auto PreviewString = TUtf8StringBuilder<128>{
+		InPlace, UE::String::JoinBy(FontSettings.GetGlyphRanges(), &FName::ToUtf8String, UTF8TEXT(", "))};
+
+	const auto bComboOpen = ImGui::BeginCombo(
+		"Glyph ranges", reinterpret_cast<const char*>(*PreviewString), ImGuiComboFlags_WidthFitPreview);
+	ZKZ_RETURN_IF(!bComboOpen, false);
+	const auto ComboGuard = Zkz::FScopedExecution{&ImGui::EndCombo};
+
+	TickGlyphRangesSelectables(SettingsObject, {SettingsObject.LatinGlyphRange});
+	TickGlyphRangesSelectables(SettingsObject, SettingsObject.BuiltinGlyphRanges);
+	TickGlyphRangesSelectables(SettingsObject, SettingsObject.UserGlyphRanges);
+
+	return false;
+}
+
+bool TickFontSizeCombo()
+{
+	auto& SettingsObject = UImGuiDeveloperToolkitSettings::Get();
+	auto& FontSettings = SettingsObject.FontSettings;
+
+	int32 FontSize = FontSettings.GetSize();
+	const bool bSizeChanged = ImGui::SliderInt("Font size", &FontSize, 8, 32);
+
+	if (bSizeChanged)
+	{
+		FontSettings.SetSize(SettingsObject, FontSize);
+		return true;
+	}
+
+	return false;
 }
 
 }  // namespace ImGuiDeveloperToolkitConfigurationPrivate
@@ -134,100 +201,54 @@ bool FImGuiDeveloperToolkitConfigurationWindow::IsShown(const FAnsiString& ToolN
 
 void FImGuiDeveloperToolkitConfigurationWindow::TickFontSelector(const float DeltaTime)
 {
-	ImGui::BeginDisabled(!bFontControlsEnabled);
+	using namespace ImGuiDeveloperToolkitConfigurationPrivate;
 
-	UImGuiDeveloperToolkitSettings& SettingsObject = UImGuiDeveloperToolkitSettings::Get();
+	bool bFontChanged = false;
+	bool bGlyphRangesChanged = false;
+	bool bSizeChanged = false;
 
-	FImGuiDeveloperToolkitFontSettings& FontSettings = SettingsObject.FontSettings;
-
-	const bool bFontChanged = [this, &SettingsObject, &FontSettings]
 	{
-		bool bResult = false;
+		ImGui::BeginDisabled(!bFontControlsEnabled);
+		const auto ScopedDisabled = Zkz::FScopedExecution(&ImGui::EndDisabled);
 
-		if (!AvailableFontPathsByName.IsEmpty())
-		{
-			if (ImGui::BeginCombo(
-					"Font",
-					FontSettings.GetName().IsEmpty()
-						? "Select font"
-						: reinterpret_cast<const char*>(*FUtf8String{FontSettings.GetName()})))
-			{
-				for (const auto& [Name, Path] : AvailableFontPathsByName)
-				{
-					if (ImGui::Selectable(
-							reinterpret_cast<const char*>(*Name), FontSettings.GetName() == FString{Name}))
-					{
-						bResult = true;
-						FontSettings.SetName(SettingsObject, FString{Name});
-					}
-				}
+		UImGuiDeveloperToolkitSettings& SettingsObject = UImGuiDeveloperToolkitSettings::Get();
 
-				ImGui::EndCombo();
-			}
-		}
+		// #TODO_dontcommit: resetting still doesn't work
 
-		return bResult;
-	}();
-
-	// #TODO_dontcommit: resetting still doesn't work
-	// #TODO_dontcommit: can we have mask return whether the mask changed or was the dropdown committed?
-
-	EImGuiDeveloperToolkitGlyphRanges GlyphRanges =
-		static_cast<EImGuiDeveloperToolkitGlyphRanges>(FontSettings.GetGlyphRanges());
-	const bool bGlyphRangesChanged = [&GlyphRanges]
-	{
-		const EImGuiDeveloperToolkitGlyphRanges OrigGlyphRanges = GlyphRanges;
-		if (ImGuiDeveloperToolkit::Widgets::Mask("Glyph ranges", GlyphRanges))
-		{
-			return GlyphRanges != OrigGlyphRanges;
-		}
-
-		return false;
-	}();
-
-	if (bGlyphRangesChanged)
-	{
-		FontSettings.SetGlyphRanges(SettingsObject, static_cast<int32>(GlyphRanges));
+		bFontChanged = TickFontCombo(SettingsObject, AvailableFontPathsByName);
+		bGlyphRangesChanged = TickGlyphRangesCombo(SettingsObject);
+		bSizeChanged = TickFontSizeCombo();
 	}
-
-	int32 FontSize = FontSettings.GetSize();
-	const bool bSizeChanged = ImGui::SliderInt("Font size", &FontSize, 8, 32);
-
-	if (bSizeChanged)
-	{
-		FontSettings.SetSize(SettingsObject, FontSize);
-	}
-
-	ImGui::EndDisabled();
 
 	if (bFontControlsEnabled && (bFontChanged || bGlyphRangesChanged || bSizeChanged))
 	{
-		bFontControlsEnabled = false;
 		Zkz::IfNotCanceled(
 			LoadFonts(),
-			[this, bFontChanged, bGlyphRangesChanged](const bool bSuccessful)
+			[this,
+			 bFontChanged,
+			 bGlyphRangesChanged,
+			 ScopedFontControlsDisabled = Zkz::TScopedAssignment{bFontControlsEnabled, false}](const bool bSuccessful)
 			{
-				bFontControlsEnabled = true;
-
 				if (!bSuccessful || !(bFontChanged || bGlyphRangesChanged))
 				{
 					return;
 				}
 
-				ShowResetFontPopup_S = 5;
+				constexpr float KeepFontAutoDeny_S = 10.0f;
+				ShowResetFontPopup_S = KeepFontAutoDeny_S;
 			});
 	}
 
-	TickResetFontPopup(DeltaTime);
+	TickKeepFontPopup(DeltaTime);
 }
 
-void FImGuiDeveloperToolkitConfigurationWindow::TickResetFontPopup(const float DeltaTime)
+void FImGuiDeveloperToolkitConfigurationWindow::TickKeepFontPopup(const float DeltaTime)
 {
 	if (ShowResetFontPopup_S > 0.f)
 	{
 		ImGui::OpenPopup("Keep font?");
 
-		ImGui::PushFont(DefaultFont);
+		const auto DefaultFontScopeGuard = ImGuiDeveloperToolkit::Widgets::PushFont(DefaultFont);
 
 		if (ImGui::BeginPopupModal("Keep font?"))
 		{
@@ -235,10 +256,22 @@ void FImGuiDeveloperToolkitConfigurationWindow::TickResetFontPopup(const float D
 
 			ImGui::NewLine();
 
-			// #TODO_dontcommit: addexample texts for other charsets
-			ImGui::PushFont(SelectedFont);
-			ImGui::Text("The quick brown fox jumps over the lazy dog");
-			ImGui::PopFont();
+			{
+				const UImGuiDeveloperToolkitSettings& SettingsObject = UImGuiDeveloperToolkitSettings::Get();
+				for (const auto GlyphRangesName : SettingsObject.FontSettings.GetGlyphRanges())
+				{
+					const auto* const GlyphRanges = SettingsObject.FindGlyphRangesByName(GlyphRangesName);
+					ZKZ_CONTINUE_IF(GlyphRanges == nullptr);
+
+					ImGui::Text("%s", reinterpret_cast<const char*>(*GlyphRangesName.ToUtf8String()));
+					ImGui::SameLine();
+
+					{
+						const auto SelectedFontScopeGuard = ImGuiDeveloperToolkit::Widgets::PushFont(SelectedFont);
+						ImGui::Text("%s", reinterpret_cast<const char*>(*GlyphRanges->TestString));
+					}
+				}
+			}
 
 			ImGui::NewLine();
 
@@ -271,8 +304,6 @@ void FImGuiDeveloperToolkitConfigurationWindow::TickResetFontPopup(const float D
 
 			ImGui::EndPopup();
 		}
-
-		ImGui::PopFont();
 	}
 }
 
@@ -306,8 +337,7 @@ Zkz::TCancelableFuture<bool> FImGuiDeveloperToolkitConfigurationWindow::LoadFont
 
 			IO.Fonts->Clear();
 
-			TArray<ImWchar, TInlineAllocator<8>> GlyphRanges;
-			MakeGlyphRanges(GlyphRanges, static_cast<EImGuiDeveloperToolkitGlyphRanges>(FontSettings.GetGlyphRanges()));
+			const auto GlyphRanges = MakeGlyphRanges(FontSettings.GetGlyphRanges());
 
 			DefaultFont = IO.Fonts->AddFontFromFileTTF(
 				reinterpret_cast<const char*>(*DefaultFontPath),

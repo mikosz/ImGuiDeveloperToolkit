@@ -56,7 +56,7 @@ private:
 
 	void TickFontSelector(float DeltaTime);
 
-	void TickResetFontPopup(float DeltaTime);
+	void TickKeepFontPopup(float DeltaTime);
 
 	Zkz::TCancelableFuture<bool> LoadFonts();
 };

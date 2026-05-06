@@ -1,12 +1,15 @@
 ﻿#include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitSettings.h"
 
-#include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitSubsystem.h"
 #include "Zakazane/Property.h"
-#include "Zakazane/ReturnIfMacros.h"
+
+FImGuiDeveloperToolkitFontSettings::FImGuiDeveloperToolkitFontSettings()
+	: GlyphRanges{UImGuiDeveloperToolkitSettings::LatinGlyphRange.Name}
+{
+}
 
 FImGuiDeveloperToolkitFontSettings::FImGuiDeveloperToolkitFontSettings(
-	FUtf8String InName, const int32 InSize, const int32 InGlyphRanges)
-	: Name{MoveTemp(InName)}, Size{InSize}, GlyphRanges{InGlyphRanges}
+	FUtf8String InName, const int32 InSize, TArray<FName> InGlyphRanges)
+	: Name{MoveTemp(InName)}, Size{InSize}, GlyphRanges{MoveTemp(InGlyphRanges)}
 {
 }
 
@@ -20,7 +23,7 @@ int32 FImGuiDeveloperToolkitFontSettings::GetSize() const
 	return Size;
 }
 
-int32 FImGuiDeveloperToolkitFontSettings::GetGlyphRanges() const
+const TArray<FName>& FImGuiDeveloperToolkitFontSettings::GetGlyphRanges() const
 {
 	return GlyphRanges;
 }
@@ -66,7 +69,8 @@ void FImGuiDeveloperToolkitFontSettings::SetSize(UImGuiDeveloperToolkitSettings&
 	Settings.SaveConfig();
 }
 
-void FImGuiDeveloperToolkitFontSettings::SetGlyphRanges(UImGuiDeveloperToolkitSettings& Settings, int32 InGlyphRanges)
+void FImGuiDeveloperToolkitFontSettings::SetGlyphRanges(
+	UImGuiDeveloperToolkitSettings& Settings, TArray<FName> InGlyphRanges)
 {
 	static const FName PropertyName = GET_MEMBER_NAME_CHECKED(UImGuiDeveloperToolkitSettings, FontSettings);
 
@@ -79,8 +83,28 @@ void FImGuiDeveloperToolkitFontSettings::SetGlyphRanges(UImGuiDeveloperToolkitSe
 	Settings.SaveConfig();
 }
 
-const FImGuiDeveloperToolkitFontSettings UImGuiDeveloperToolkitSettings::FallbackFontSettings{
-	"Roboto-Regular", 14, static_cast<int32>(EImGuiDeveloperToolkitGlyphRanges::BasicLatin)};
+const FImGuiDeveloperToolkitFontSettings
+	UImGuiDeveloperToolkitSettings::FallbackFontSettings{"Roboto-Regular", 14, {LatinGlyphRange.Name}};
+const FImGuiDeveloperToolkitFontGlyphRanges UImGuiDeveloperToolkitSettings::LatinGlyphRange{
+	"Latin", "The quick brown fox jumps over the lazy dog", {{0x0020, 0x007F}}};
+
+const TArray<FImGuiDeveloperToolkitFontGlyphRanges> UImGuiDeveloperToolkitSettings::BuiltinGlyphRanges{
+	FImGuiDeveloperToolkitFontGlyphRanges{
+		"Polish Diacritics",
+		// ReSharper disable once StringLiteralTypo
+		"Zażółć gęślą jaźń",
+		{
+			{0x0104, 0x0105},  // Ą, ą
+			{0x0106, 0x0107},  // Ć, ć
+			{0x0118, 0x0119},  // Ę, ę
+			{0x0141, 0x0142},  // Ł, ł
+			{0x0143, 0x0144},  // Ń, ń
+			{0x00D3, 0x00D3},  // Ó
+			{0x00F3, 0x00F3},  // ó
+			{0x015A, 0x015B},  // Ś, ś
+			{0x0179, 0x017A},  // Ź, ź
+			{0x017B, 0x017C}   // Ż, ż
+		}}};
 
 UImGuiDeveloperToolkitSettings& UImGuiDeveloperToolkitSettings::Get()
 {
@@ -100,4 +124,33 @@ void UImGuiDeveloperToolkitSettings::ResetFontSettings()
 
 	// #TODO_dontcommit: see comment in setname
 	SaveConfig();
+}
+
+TArray<FName> UImGuiDeveloperToolkitSettings::GetGlyphRangeNames() const
+{
+	TArray<FName> Result;
+
+	Result.Reserve(1 + BuiltinGlyphRanges.Num() + UserGlyphRanges.Num());
+
+	Result.Emplace(LatinGlyphRange.Name);
+	Algo::Transform(BuiltinGlyphRanges, Result, &FImGuiDeveloperToolkitFontGlyphRanges::Name);
+	Algo::Transform(UserGlyphRanges, Result, &FImGuiDeveloperToolkitFontGlyphRanges::Name);
+
+	return Result;
+}
+
+const FImGuiDeveloperToolkitFontGlyphRanges* UImGuiDeveloperToolkitSettings::FindGlyphRangesByName(FName InName) const
+{
+	if (LatinGlyphRange.Name == InName)
+	{
+		return &LatinGlyphRange;
+	}
+
+	if (auto* const BuiltinFontGlyphRange =
+			Algo::FindBy(BuiltinGlyphRanges, InName, &FImGuiDeveloperToolkitFontGlyphRanges::Name))
+	{
+		return BuiltinFontGlyphRange;
+	}
+
+	return Algo::FindBy(UserGlyphRanges, InName, &FImGuiDeveloperToolkitFontGlyphRanges::Name);
 }

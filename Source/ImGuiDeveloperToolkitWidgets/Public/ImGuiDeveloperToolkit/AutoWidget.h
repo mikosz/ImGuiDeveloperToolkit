@@ -133,28 +133,38 @@ bool Mask(const char* Label, MaskEnumClass& InOutMaskValue)
 	return bResult;
 }
 
+// #TODO_dontcommit: consider other name than "AutoWidget". Actually move string stuff to Text.h and call InputText.
+// Leave AutoWidget and just call input. AutoWidget makes sense as a set of default widgets to be called in templates
+// for instance.
+
+// #TODO_dontcommit: also move enum combo to an EnumCombo function and call it from AutoWidget.
+// #TODO_dontcommit: add search combo widget - (potentially) expandable input text showing candidates if available
+
 IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, bool& BoolValue);
 IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, const bool& BoolValue);
 
-IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, FUtf8String& Utf8StringValue);
-IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, const FUtf8String& Utf8StringValue);
-IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, FUtf8StringView Utf8StringValue);
-
-IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, FString& StringValue);
-IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, const FString& StringValue);
+/// Utf8String / String widgets. If Font null will use default font.
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(
+	const char* Label, FUtf8String& Utf8StringValue, ImFont* Font = nullptr);
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(
+	const char* Label, const FUtf8String& Utf8StringValue, ImFont* Font = nullptr);
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(
+	const char* Label, FUtf8StringView Utf8StringValue, ImFont* Font = nullptr);
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, FString& StringValue, ImFont* Font = nullptr);
+IMGUIDEVELOPERTOOLKITWIDGETS_API bool AutoWidget(const char* Label, const FString& StringValue, ImFont* Font = nullptr);
 
 template <class CharType>
-bool AutoWidget(const char* Label, TStringView<CharType> StringValue)
+bool AutoWidget(const char* Label, TStringView<CharType> StringValue, ImFont* Font = nullptr)
 {
 	FUtf8String Utf8String{StringValue};
-	return AutoWidget(Label, Utf8String);
+	return AutoWidget(Label, Utf8String, Font);
 }
 
 template <class NumericType UE_REQUIRES(std::is_arithmetic_v<NumericType>)>
 bool AutoWidget(const char* Label, NumericType& NumericValue, NumericType Step, NumericType StepFast)
 {
 	using namespace Private;
-// #TODO_dontcommit: label?
+	// #TODO_dontcommit: label?
 	return ImGui::InputScalar(
 		"",
 		TImGuiScalarDataType_V<NumericType>,

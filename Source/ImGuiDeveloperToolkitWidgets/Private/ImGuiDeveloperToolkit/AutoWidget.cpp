@@ -1,6 +1,7 @@
 ﻿#include "ImGuiDeveloperToolkit/AutoWidget.h"
 
 #include "ImGuiDeveloperToolkit/Private/EnumValueRange.h"
+#include "ImGuiDeveloperToolkit/Text.h"
 #include "Zakazane/TypeTraits.h"
 
 #include <type_traits>
@@ -181,8 +182,10 @@ bool AutoWidget(const char* Label, const bool& BoolValue)
 	return bResult;
 }
 
-bool AutoWidget(const char* Label, FUtf8String& Utf8StringValue)
+bool AutoWidget(const char* Label, FUtf8String& Utf8StringValue, ImFont* const Font)
 {
+	const auto FontScopeGuard = PushFont(Font);
+
 	TArray<char, TInlineAllocator<128>> CharBuf;
 	const TArray<UTF8CHAR>& UTF8Chars = Utf8StringValue.GetCharArray();
 	CharBuf.Reserve(UTF8Chars.Num());
@@ -204,8 +207,10 @@ bool AutoWidget(const char* Label, FUtf8String& Utf8StringValue)
 	return false;
 }
 
-bool AutoWidget(const char* Label, const FUtf8StringView Utf8StringValue)
+bool AutoWidget(const char* Label, const FUtf8StringView Utf8StringValue, ImFont* const Font)
 {
+	const auto FontScopeGuard = PushFont(Font);
+
 	TArray<char, TInlineAllocator<128>> CharBuf;
 	CharBuf.Reserve(Utf8StringValue.NumBytes());
 	Algo::Transform(Utf8StringValue, CharBuf, [](const UTF8CHAR Char) { return static_cast<char>(Char); });
@@ -217,10 +222,10 @@ bool AutoWidget(const char* Label, const FUtf8StringView Utf8StringValue)
 	return bResult;
 }
 
-bool AutoWidget(const char* Label, FString& StringValue)
+bool AutoWidget(const char* Label, FString& StringValue, ImFont* const Font)
 {
 	FUtf8String Utf8String{StringValue};
-	if (AutoWidget(Label, Utf8String))
+	if (AutoWidget(Label, Utf8String, Font))
 	{
 		StringValue = FString{Utf8String};
 		return true;
@@ -229,9 +234,9 @@ bool AutoWidget(const char* Label, FString& StringValue)
 	return false;
 }
 
-bool AutoWidget(const char* Label, const FString& StringValue)
+bool AutoWidget(const char* Label, const FString& StringValue, ImFont* const Font)
 {
-	return AutoWidget(Label, TStringView{StringValue});
+	return AutoWidget(Label, TStringView{StringValue}, Font);
 }
 
 }  // namespace ImGuiDeveloperToolkit::Widgets
