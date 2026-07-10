@@ -222,7 +222,7 @@ void UImGuiDeveloperToolkitSubsystem::TickTools(const float DeltaTime)
 
 		const FAnsiString ToolName = Tool->GetToolName();
 
-		bool bShown = true; //Configuration.IsShown(ToolName);
+		bool bShown = Configuration.IsShown(ToolName);
 		Tool->Tick(DeltaTime, bShown, Context, World);
 
 		Configuration.SetShown(ToolName, bShown);

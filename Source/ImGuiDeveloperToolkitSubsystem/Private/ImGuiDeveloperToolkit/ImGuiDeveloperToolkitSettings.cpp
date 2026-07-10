@@ -27,7 +27,7 @@ UImGuiDeveloperToolkitUserSettings& UImGuiDeveloperToolkitUserSettings::Get()
 	if (!IsValid(UserSettings.Get()))
 	{
 		UserSettings.Reset(
-			NewObject<UImGuiDeveloperToolkitUserSettings>(nullptr, "ImGuiDeveloperToolkitSettings_User"));
+			NewObject<UImGuiDeveloperToolkitUserSettings>(GetTransientPackage(), "ImGuiDeveloperToolkitSettings_User"));
 	}
 
 	return *UserSettings;

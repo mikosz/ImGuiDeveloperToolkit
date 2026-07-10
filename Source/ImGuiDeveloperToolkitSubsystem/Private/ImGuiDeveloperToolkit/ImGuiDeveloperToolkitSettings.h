@@ -36,7 +36,7 @@ public:
 	static UImGuiDeveloperToolkitUserSettings& Get();
 
 	UPROPERTY(Config)
-	TArray<FString> OpenTools;
+	TArray<FAnsiString> OpenTools;
 
 	FImGuiDeveloperToolkitFontConfiguration GetFontSettings() const;
 

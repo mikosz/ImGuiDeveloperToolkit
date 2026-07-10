@@ -63,6 +63,7 @@ struct IMGUIDEVELOPERTOOLKITSUBSYSTEM_API FImGuiDeveloperToolkitConfiguration
 
 	ImFont* GetFont() const;
 
+	// #TODO_dontcommit: is this stuff used at all anymore?
 	void SetShown(const FAnsiString& ToolName, bool bToolShown);
 
 	bool IsShown(const FAnsiString& ToolName) const;

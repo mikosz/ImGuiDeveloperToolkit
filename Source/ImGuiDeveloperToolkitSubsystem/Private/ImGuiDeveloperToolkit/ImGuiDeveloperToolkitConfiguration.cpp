@@ -2,142 +2,18 @@
 
 #include "ImGuiContext.h"
 #include "ImGuiDeveloperToolkit/AutoWidget.h"
-#include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitSubsystem.h"
 #include "ImGuiDeveloperToolkit/ImGuiDeveloperToolkitWindow.h"
 #include "ImGuiDeveloperToolkit/Private/EnumValueRange.h"
 #include "ImGuiDeveloperToolkitSettings.h"
 #include "ImageUtils.h"
-#include "SkeletalRenderPublic.h"
 
+// ReSharper disable CppUE4CodingStandardNamingViolationWarning
 struct ImGuiContextHook;
 struct ImGuiSettingsHandler;
+// ReSharper restore CppUE4CodingStandardNamingViolationWarning
 
 namespace ImGuiDeveloperToolkitConfigurationPrivate
 {
-
-struct FConfigurationData
-{
-	FUtf8String FontName = {};
-	int32 FontSize = -1;
-	FAnsiString Glyphs;
-	TMap<FAnsiString, bool> ToolShownByName = {};
-};
-
-enum class EConfigurationSection : intptr_t
-{
-	Font = 1,
-	Tools,
-};
-
-const FAnsiStringView FontSectionName{"Font"};
-const FAnsiStringView ToolsSectionName{"Tools"};
-
-FConfigurationData* GConfigurationData = nullptr;
-
-void* ConfigurationHandler_ReadOpen(ImGuiContext* Ctx, ImGuiSettingsHandler* Handler, const char* Name)
-{
-	const FAnsiStringView NameView{Name};
-
-	if (NameView == FontSectionName)
-	{
-		return reinterpret_cast<void*>(EConfigurationSection::Font);
-	}
-
-	if (NameView == ToolsSectionName)
-	{
-		return reinterpret_cast<void*>(EConfigurationSection::Tools);
-	}
-
-	return nullptr;
-}
-
-void ConfigurationHandler_ReadLine(ImGuiContext*, ImGuiSettingsHandler*, void* Entry, const char* Line)
-{
-	using namespace ImGuiDeveloperToolkit;
-
-	if (GConfigurationData == nullptr)
-	{
-		return;
-	}
-
-	const FUtf8StringView LineView{Line};
-
-	int32 EqIdx = -1;
-	if (!LineView.FindChar(UTF8CHAR{'='}, EqIdx))
-	{
-		return;
-	}
-
-	const FUtf8StringView Key = LineView.Left(EqIdx).TrimStartAndEnd();
-	const FUtf8StringView Value = LineView.RightChop(EqIdx + 1).TrimStartAndEnd();
-
-	const EConfigurationSection Section = static_cast<EConfigurationSection>(reinterpret_cast<intptr_t>(Entry));
-
-	if (Section == EConfigurationSection::Font)
-	{
-		if (Key == FUtf8StringView{"Name"})
-		{
-			GConfigurationData->FontName = Value;
-		}
-		else if (Key == FUtf8StringView{"Size"})
-		{
-			const FUtf8String ValueStr{Value};
-			GConfigurationData->FontSize = FCStringUtf8::Atoi(*ValueStr);
-		}
-		else if (Key == FUtf8StringView{"Glyphs"})
-		{
-			GConfigurationData->Glyphs = FAnsiString{Value};
-		}
-	}
-	else if (Section == EConfigurationSection::Tools)
-	{
-		const FUtf8String ValueStr{Value};
-		const bool bShown = FCStringUtf8::ToBool(*ValueStr);
-		GConfigurationData->ToolShownByName.Emplace(Key, bShown);
-	}
-}
-
-static void ConfigurationHandler_ApplyAll(ImGuiContext* Ctx, ImGuiSettingsHandler*)
-{
-	if (GConfigurationData == nullptr || !IsValid(GEngine))
-	{
-		return;
-	}
-
-	UImGuiDeveloperToolkitSubsystem* Subsystem = GEngine->GetEngineSubsystem<UImGuiDeveloperToolkitSubsystem>();
-	if (!IsValid(Subsystem))
-	{
-		return;
-	}
-
-	const int32 GlyphRanges = []
-	{
-		const UEnum* Enum = StaticEnum<EImGuiDeveloperToolkitGlyphRanges>();
-		if (!ensure(IsValid(Enum)))
-		{
-			return static_cast<int32>(EImGuiDeveloperToolkitGlyphRanges::Default);
-		}
-
-		TArray<FAnsiString> GlyphNames;
-		FAnsiString{GConfigurationData->Glyphs}.ParseIntoArray(GlyphNames, "|");
-
-		int32 Result = 0;
-		for (const FAnsiString& GlyphName : GlyphNames)
-		{
-			Result |= Enum->GetValueByNameString(FString{GlyphName}, EGetByNameFlags::ErrorIfNotFound);
-		}
-
-		return Result;
-	}();
-
-	UImGuiDeveloperToolkitUserSettings* const Settings = GetMutableDefault<UImGuiDeveloperToolkitUserSettings>();
-	if (!IsValid(Settings))
-	{
-		return;
-	}
-
-	Subsystem->Configuration.SetFont(GConfigurationData->FontName, GConfigurationData->FontSize, GlyphRanges);
-}
 
 // #TODO_dontcommit: a bunch of utf8 <-> Fstring casts in this file that we don't want
 
@@ -150,37 +26,6 @@ StringType JoinGlyphsAsString(const EImGuiDeveloperToolkitGlyphRanges Mask, cons
 		TMaskEnumValueRange<EImGuiDeveloperToolkitGlyphRanges>{Mask},
 		*Separator,
 		&TEnumValue<EImGuiDeveloperToolkitGlyphRanges>::GetName);
-}
-
-// ReSharper disable once CppParameterMayBeConstPtrOrRef
-static void ConfigurationHandler_WriteAll(ImGuiContext* Ctx, ImGuiSettingsHandler* Handler, ImGuiTextBuffer* Buf)
-{
-	if (GConfigurationData == nullptr || GConfigurationData->FontName.IsEmpty() && GConfigurationData->FontSize <= 0)
-	{
-		return;
-	}
-
-	Buf->appendf("[ImGuiDeveloperToolkitConfiguration][Font]\n");
-	Buf->appendf("Name=%s\n", *GConfigurationData->FontName);
-	Buf->appendf("Size=%d\n", GConfigurationData->FontSize);
-	Buf->appendf("Glyphs=%s\n", *GConfigurationData->Glyphs);
-
-	Buf->appendf("\n[ImGuiDeveloperToolkitConfiguration][Tools]\n");
-	for (const auto& [ToolName, bShow] : GConfigurationData->ToolShownByName)
-	{
-		Buf->appendf("%s=%d\n", *ToolName, bShow);
-	}
-}
-
-static void ContextHook_Shutdown(ImGuiContext* Ctx, ImGuiContextHook* Hook)
-{
-	if (GConfigurationData == nullptr)
-	{
-		return;
-	}
-
-	delete GConfigurationData;
-	GConfigurationData = nullptr;
 }
 
 template <class ArrayType>
@@ -331,27 +176,20 @@ ImFont* FImGuiDeveloperToolkitConfiguration::GetFont() const
 // ReSharper disable once CppMemberFunctionMayBeStatic
 void FImGuiDeveloperToolkitConfiguration::SetShown(const FAnsiString& ToolName, const bool bToolShown)
 {
-	using namespace ImGuiDeveloperToolkitConfigurationPrivate;
-
-	if (GConfigurationData == nullptr)
+	if (bToolShown)
 	{
-		return;
+		UImGuiDeveloperToolkitUserSettings::Get().OpenTools.Emplace(ToolName);
 	}
-
-	GConfigurationData->ToolShownByName.FindOrAdd(ToolName) = bToolShown;
+	else
+	{
+		UImGuiDeveloperToolkitUserSettings::Get().OpenTools.RemoveSwap(ToolName);
+	}
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
 bool FImGuiDeveloperToolkitConfiguration::IsShown(const FAnsiString& ToolName) const
 {
-	using namespace ImGuiDeveloperToolkitConfigurationPrivate;
-
-	if (GConfigurationData == nullptr)
-	{
-		return false;
-	}
-
-	return GConfigurationData->ToolShownByName.FindOrAdd(ToolName, false);
+	return UImGuiDeveloperToolkitUserSettings::Get().OpenTools.Contains(ToolName);
 }
 
 void FImGuiDeveloperToolkitConfiguration::TickFontSelector(const float DeltaTime)

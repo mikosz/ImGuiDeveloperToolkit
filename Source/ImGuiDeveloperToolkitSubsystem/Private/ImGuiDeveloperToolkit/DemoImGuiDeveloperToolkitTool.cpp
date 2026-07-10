@@ -25,7 +25,6 @@ void UDemoImGuiDeveloperToolkitTool::Tick(
 
 void UDemoImGuiDeveloperToolkitTool::TickDemoSelectionWindow(bool& bInOutShow)
 {
-	// #TODO_dontcommit closing tool windows broken after config update
 	ZKZ_RETURN_IF(!bInOutShow);
 
 	ON_SCOPE_EXIT
